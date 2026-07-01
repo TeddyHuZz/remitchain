@@ -12,9 +12,12 @@
   },
   "dependencies": {
     "@repo/ui": "workspace:*",
+    "@tanstack/react-table": "^8.21.3",
+    "lucide-react": "^1.22.0",
     "next": "16.2.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "viem": "^2.54.1"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
