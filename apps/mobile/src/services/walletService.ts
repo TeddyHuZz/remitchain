@@ -63,10 +63,98 @@ class WalletService {
    */
   async initializeWallet(
     username: string,
+    loginMethod: 'passkey' | 'google',
     onProgress?: (status: string) => void
   ): Promise<WalletState> {
-    onProgress?.("Generating secure device keys...");
-    const privateKey = await this.getOrCreatePrivateKey();
+    let privateKey: Hex;
+
+    if (loginMethod === 'passkey') {
+      onProgress?.("Triggering biometric scan...");
+      try {
+        const LocalAuthentication = await import('expo-local-authentication');
+        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+        if (hasHardware && isEnrolled) {
+          const authResult = await LocalAuthentication.authenticateAsync({
+            promptMessage: 'Unlock or create your secure wallet key',
+            fallbackLabel: 'Use device passcode',
+          });
+          if (!authResult.success) {
+            throw new Error("Biometric scan was cancelled or failed.");
+          }
+        } else {
+          console.warn("Biometrics hardware not available or not enrolled, skipping prompt.");
+        }
+      } catch (err) {
+        console.warn("Biometric authentication error, proceeding with passcode/fallback:", err);
+      }
+
+      onProgress?.("Generating secure device keys...");
+      privateKey = await this.getOrCreatePrivateKey();
+    } else {
+      // Google Login via Web3Auth
+      onProgress?.("Initializing Google login...");
+      try {
+        const WebBrowser = await import('expo-web-browser');
+        const Web3AuthModule = await import('@web3auth/react-native-sdk');
+        const Web3Auth = (Web3AuthModule as any).Web3Auth || (Web3AuthModule as any).default;
+
+        // Create storage adapter for Web3Auth
+        const secureStoreStorage = {
+          getItem: async (key: string) => SecureStore.getItemAsync(key),
+          setItem: async (key: string, value: string) => SecureStore.setItemAsync(key, value),
+          removeItem: async (key: string) => SecureStore.deleteItemAsync(key),
+          clear: async () => {}, // Fulfills interface type requirements
+        };
+
+        const web3auth = new Web3Auth(WebBrowser, secureStoreStorage, {
+          clientId: WEB3_CONFIG.WEB3AUTH_CLIENT_ID,
+          network: WEB3_CONFIG.WEB3AUTH_NETWORK as any,
+          redirectUrl: WEB3_CONFIG.WEB3AUTH_REDIRECT_URL,
+        });
+
+        await web3auth.init();
+
+        onProgress?.("Redirecting to Google OAuth...");
+        const connectParams: any = {
+          loginProvider: "google",
+          redirectUrl: WEB3_CONFIG.WEB3AUTH_REDIRECT_URL,
+        };
+
+        if (WEB3_CONFIG.WEB3AUTH_CONNECTION_ID) {
+          connectParams.extraLoginOptions = {
+            connection: WEB3_CONFIG.WEB3AUTH_CONNECTION_ID,
+          };
+        }
+
+        await (web3auth as any).connect(connectParams);
+
+        // Request private key from the provider
+        const rawPrivKey = await (web3auth as any).provider.request({
+          method: "eth_private_key",
+        });
+
+        if (!rawPrivKey) {
+          throw new Error("No private key returned from Web3Auth.");
+        }
+
+        privateKey = (rawPrivKey.startsWith("0x") ? rawPrivKey : `0x${rawPrivKey}`) as Hex;
+        
+        // Persist the derived key
+        await SecureStore.setItemAsync(EOA_PRIVATE_KEY_KEY, privateKey, {
+          requireAuthentication: true,
+          authenticationPrompt: 'Secure your Google Web3 key with biometrics',
+        });
+      } catch (err: any) {
+        console.error("Web3Auth Google login failed, falling back to secure local key:", err);
+        // Prompt the user and fallback to local key so they can still test
+        onProgress?.("Google Auth failed, falling back to secure local key...");
+        await new Promise((r) => setTimeout(r, 1200));
+        privateKey = await this.getOrCreatePrivateKey();
+      }
+    }
+
     const ownerAccount = privateKeyToAccount(privateKey);
     const ownerAddress = ownerAccount.address;
 

@@ -16,4 +16,13 @@ config.resolver.nodeModulesPaths = [
   path.resolve(monorepoRoot, 'node_modules'),
 ];
 
+// 3. Force Metro to map Node core imports to their mobile polyfills
+config.resolver.extraNodeModules = {
+  events: path.resolve(projectRoot, 'node_modules/events'),
+  buffer: path.resolve(projectRoot, 'node_modules/buffer'),
+  url: path.resolve(projectRoot, 'node_modules/url'),
+  stream: path.resolve(projectRoot, 'node_modules/stream-browserify'),
+  path: path.resolve(projectRoot, 'node_modules/path-browserify'),
+};
+
 module.exports = config;

@@ -4,13 +4,13 @@ import {
   Text,
   View,
   TouchableOpacity,
-  SafeAreaView,
   TextInput,
   ActivityIndicator,
   Alert,
   Clipboard,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { walletService, WalletState } from '../services/walletService';
 
 interface DashboardScreenProps {

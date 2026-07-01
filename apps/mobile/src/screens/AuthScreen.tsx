@@ -5,14 +5,14 @@ import {
   View,
   TextInput,
   TouchableOpacity,
-  SafeAreaView,
   KeyboardAvoidingView,
   Platform,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface AuthScreenProps {
-  onStartSetup: (username: string) => void;
+  onStartSetup: (username: string, loginMethod: 'passkey' | 'google') => void;
 }
 
 export default function AuthScreen({ onStartSetup }: AuthScreenProps) {
@@ -25,7 +25,7 @@ export default function AuthScreen({ onStartSetup }: AuthScreenProps) {
       return;
     }
     // Initiate wallet setup
-    onStartSetup(username.trim());
+    onStartSetup(username.trim(), 'passkey');
   };
 
   const handleGoogleAuth = () => {
@@ -34,7 +34,7 @@ export default function AuthScreen({ onStartSetup }: AuthScreenProps) {
       return;
     }
     // Simulate/Initiate Google auth
-    onStartSetup(username.trim());
+    onStartSetup(username.trim(), 'google');
   };
 
   return (

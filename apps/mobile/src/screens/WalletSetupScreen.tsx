@@ -1,15 +1,18 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, Text, View, ActivityIndicator, SafeAreaView } from 'react-native';
+import { StyleSheet, Text, View, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { walletService, WalletState } from '../services/walletService';
 
 interface WalletSetupScreenProps {
   username: string;
+  loginMethod: 'passkey' | 'google';
   onSetupSuccess: (walletState: WalletState) => void;
   onSetupError: (error: string) => void;
 }
 
 export default function WalletSetupScreen({
   username,
+  loginMethod,
   onSetupSuccess,
   onSetupError,
 }: WalletSetupScreenProps) {
@@ -20,7 +23,7 @@ export default function WalletSetupScreen({
 
     const runSetup = async () => {
       try {
-        const wallet = await walletService.initializeWallet(username, (msg) => {
+        const wallet = await walletService.initializeWallet(username, loginMethod, (msg: string) => {
           if (active) setStatus(msg);
         });
         if (active) onSetupSuccess(wallet);
@@ -34,7 +37,7 @@ export default function WalletSetupScreen({
     return () => {
       active = false;
     };
-  }, [username]);
+  }, [username, loginMethod]);
 
   return (
     <SafeAreaView style={styles.container}>

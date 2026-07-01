@@ -11,6 +11,7 @@ type AppScreen = 'loading' | 'auth' | 'setup' | 'dashboard';
 export default function App() {
   const [screen, setScreen] = useState<AppScreen>('loading');
   const [username, setUsername] = useState('');
+  const [loginMethod, setLoginMethod] = useState<'passkey' | 'google'>('passkey');
   const [wallet, setWallet] = useState<WalletState | null>(null);
 
   // Check for existing session on startup
@@ -27,8 +28,9 @@ export default function App() {
     checkSession();
   }, []);
 
-  const handleStartSetup = (name: string) => {
+  const handleStartSetup = (name: string, method: 'passkey' | 'google') => {
     setUsername(name);
+    setLoginMethod(method);
     setScreen('setup');
   };
 
@@ -64,6 +66,7 @@ export default function App() {
       {screen === 'setup' && (
         <WalletSetupScreen
           username={username}
+          loginMethod={loginMethod}
           onSetupSuccess={handleSetupSuccess}
           onSetupError={handleSetupError}
         />
