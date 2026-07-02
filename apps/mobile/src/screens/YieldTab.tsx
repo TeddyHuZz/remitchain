@@ -43,6 +43,7 @@ export default function YieldTab({ wallet, walletBalance, onTransactionComplete,
 
   // Real-time ticking display
   const [displayBalance, setDisplayBalance] = useState('0.00');
+  const [displayInterest, setDisplayInterest] = useState('0.000000');
   const tickIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Fetch yield balance on mount and when address changes
@@ -60,6 +61,7 @@ export default function YieldTab({ wallet, walletBalance, onTransactionComplete,
     const baseTotal = parseFloat(yieldTotal);
     if (principal <= 0 || baseTotal <= 0) {
       setDisplayBalance(yieldTotal);
+      setDisplayInterest(yieldInterest);
       return;
     }
 
@@ -69,10 +71,12 @@ export default function YieldTab({ wallet, walletBalance, onTransactionComplete,
     let tickedBalance = baseTotal;
 
     setDisplayBalance(tickedBalance.toFixed(6));
+    setDisplayInterest((tickedBalance - principal).toFixed(6));
 
     tickIntervalRef.current = setInterval(() => {
       tickedBalance += perSecondYield;
       setDisplayBalance(tickedBalance.toFixed(6));
+      setDisplayInterest((tickedBalance - principal).toFixed(6));
     }, 1000);
 
     return () => {
@@ -80,7 +84,7 @@ export default function YieldTab({ wallet, walletBalance, onTransactionComplete,
         clearInterval(tickIntervalRef.current);
       }
     };
-  }, [yieldTotal, yieldPrincipal, apyBps]);
+  }, [yieldTotal, yieldPrincipal, apyBps, yieldInterest]);
 
   const fetchYieldBalance = async () => {
     setIsLoadingYield(true);
@@ -235,7 +239,7 @@ export default function YieldTab({ wallet, walletBalance, onTransactionComplete,
           <View style={styles.yieldBreakdownItem}>
             <Text style={styles.yieldBreakdownLabel}>Interest Earned</Text>
             <Text style={[styles.yieldBreakdownValue, styles.interestColor]}>
-              +${yieldInterest}
+              +${displayInterest}
             </Text>
           </View>
         </View>
@@ -385,7 +389,7 @@ export default function YieldTab({ wallet, walletBalance, onTransactionComplete,
             </View>
             <View style={styles.modalDetailRow}>
               <Text style={styles.modalLabel}>Gas Fee</Text>
-              <Text style={styles.modalGasSaved}>⚡ Sponsored (Free)</Text>
+              <Text style={styles.modalGasSaved}> Sponsored (Free)</Text>
             </View>
 
             <TouchableOpacity
@@ -414,30 +418,35 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 32,
-    paddingTop: 8,
+    paddingHorizontal: 0,
+    paddingBottom: 24,
+    paddingTop: 10,
   },
 
   // ─── Yield Balance Card ────────────────────────────────────────────
   yieldCard: {
-    backgroundColor: 'rgba(16, 185, 129, 0.06)',
+    backgroundColor: '#0E1120',
     borderRadius: 16,
-    padding: 20,
-    marginBottom: 14,
+    padding: 18,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.15)',
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   yieldCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   yieldCardTitle: {
     color: '#94A3B8',
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
   },
@@ -446,10 +455,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.25)',
   },
   apyBadgeText: {
     color: '#10B981',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   yieldBalanceRow: {
@@ -458,22 +469,25 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   yieldBalanceAmount: {
-    color: '#10B981',
+    color: '#FFFFFF',
     fontSize: 32,
     fontWeight: '800',
+    letterSpacing: -1,
     fontVariant: ['tabular-nums'],
   },
   yieldBalanceCurrency: {
-    color: '#34D399',
-    fontSize: 14,
-    fontWeight: '600',
+    color: '#10B981',
+    fontSize: 20,
+    fontWeight: '700',
     marginLeft: 8,
   },
   yieldBreakdown: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderRadius: 10,
-    padding: 12,
+    backgroundColor: '#070913',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1E293B',
+    padding: 14,
   },
   yieldBreakdownItem: {
     flex: 1,
@@ -481,16 +495,17 @@ const styles = StyleSheet.create({
   },
   yieldBreakdownDivider: {
     width: 1,
-    backgroundColor: 'rgba(148, 163, 184, 0.15)',
+    backgroundColor: '#1E293B',
   },
   yieldBreakdownLabel: {
     color: '#64748B',
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '600',
+    textTransform: 'uppercase',
     marginBottom: 4,
   },
   yieldBreakdownValue: {
-    color: '#E2E8F0',
+    color: '#F1F5F9',
     fontSize: 14,
     fontWeight: '700',
   },
@@ -503,30 +518,40 @@ const styles = StyleSheet.create({
   },
   refreshText: {
     color: '#64748B',
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 11,
+    fontWeight: '700',
   },
 
   // ─── Estimated Earnings Card ───────────────────────────────────────
   earningsCard: {
-    backgroundColor: 'rgba(99, 102, 241, 0.06)',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 14,
+    backgroundColor: '#0E1120',
+    borderRadius: 16,
+    padding: 18,
     borderWidth: 1,
-    borderColor: 'rgba(99, 102, 241, 0.12)',
+    borderColor: '#1E293B',
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   earningsTitle: {
     color: '#94A3B8',
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    letterSpacing: 0.8,
     marginBottom: 12,
   },
   earningsGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    backgroundColor: '#070913',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1E293B',
+    padding: 14,
   },
   earningsItem: {
     flex: 1,
@@ -535,7 +560,8 @@ const styles = StyleSheet.create({
   earningsLabel: {
     color: '#64748B',
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '600',
+    textTransform: 'uppercase',
     marginBottom: 4,
   },
   earningsValue: {
@@ -546,141 +572,167 @@ const styles = StyleSheet.create({
 
   // ─── Action Card (Deposit/Withdraw) ────────────────────────────────
   actionCard: {
-    backgroundColor: 'rgba(30, 41, 59, 0.5)',
+    backgroundColor: '#0E1120',
     borderRadius: 16,
     padding: 18,
-    marginBottom: 14,
     borderWidth: 1,
-    borderColor: 'rgba(148, 163, 184, 0.08)',
+    borderColor: '#1E293B',
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   toggleRow: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
-    borderRadius: 10,
+    backgroundColor: '#070913',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#1E293B',
     padding: 3,
-    marginBottom: 14,
+    marginBottom: 12,
   },
   toggleBtn: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
+    height: 32,
+    justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: 6,
   },
   toggleBtnActive: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    backgroundColor: '#6366F1',
   },
   toggleBtnActiveWithdraw: {
-    backgroundColor: 'rgba(99, 102, 241, 0.15)',
+    backgroundColor: '#6366F1',
   },
   toggleBtnText: {
+    fontSize: 12,
     color: '#64748B',
-    fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   toggleBtnTextActive: {
-    color: '#E2E8F0',
+    color: '#FFFFFF',
   },
   availableText: {
     color: '#64748B',
-    fontSize: 12,
+    fontSize: 11,
     marginBottom: 10,
     textAlign: 'center',
+    fontWeight: '600',
   },
   processingContainer: {
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     paddingVertical: 20,
-    gap: 10,
   },
   processingText: {
-    color: '#818CF8',
+    color: '#94A3B8',
     fontSize: 13,
+    marginTop: 10,
     fontWeight: '500',
   },
   amountInputContainer: {
-    position: 'relative',
-    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#070913',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1E293B',
+    marginBottom: 14,
+    height: 48,
+    paddingRight: 8,
   },
   amountInput: {
-    backgroundColor: 'rgba(15, 23, 42, 0.8)',
-    borderRadius: 10,
+    flex: 1,
+    height: 48,
     paddingHorizontal: 14,
-    paddingVertical: 12,
-    paddingRight: 60,
-    color: '#E2E8F0',
     fontSize: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(148, 163, 184, 0.1)',
+    color: '#FFFFFF',
+    fontWeight: '500',
   },
   maxButton: {
-    position: 'absolute',
-    right: 8,
-    top: 8,
     backgroundColor: 'rgba(99, 102, 241, 0.15)',
-    borderRadius: 6,
+    paddingVertical: 5,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(99, 102, 241, 0.25)',
   },
   maxButtonText: {
     color: '#818CF8',
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   actionButton: {
     backgroundColor: '#10B981',
-    borderRadius: 12,
-    paddingVertical: 14,
+    borderRadius: 10,
+    height: 48,
+    justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
     marginBottom: 10,
   },
   actionButtonWithdraw: {
     backgroundColor: '#6366F1',
+    shadowColor: '#6366F1',
   },
   actionButtonText: {
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
+    letterSpacing: 0.2,
   },
   infoNote: {
-    color: '#475569',
+    color: '#64748B',
     fontSize: 11,
     textAlign: 'center',
     lineHeight: 16,
+    fontWeight: '500',
   },
 
   // ─── How It Works Card ─────────────────────────────────────────────
   infoCard: {
-    backgroundColor: 'rgba(30, 41, 59, 0.3)',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 14,
+    backgroundColor: '#0E1120',
+    borderRadius: 16,
+    padding: 18,
     borderWidth: 1,
-    borderColor: 'rgba(148, 163, 184, 0.06)',
+    borderColor: '#1E293B',
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   infoCardTitle: {
     color: '#94A3B8',
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    letterSpacing: 0.8,
     marginBottom: 14,
   },
   infoStep: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   infoStepNum: {
     color: '#10B981',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.25)',
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 18,
     marginRight: 10,
   },
   infoStepText: {
@@ -688,50 +740,59 @@ const styles = StyleSheet.create({
     fontSize: 12,
     flex: 1,
     lineHeight: 18,
+    fontWeight: '500',
   },
 
   // ─── Success Modal ─────────────────────────────────────────────────
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(7, 9, 19, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    padding: 24,
   },
   modalCard: {
-    backgroundColor: '#1E293B',
+    backgroundColor: '#0E1120',
     borderRadius: 20,
-    padding: 28,
+    borderWidth: 1,
+    borderColor: '#1E293B',
+    padding: 24,
     width: '100%',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(148, 163, 184, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 10,
   },
   successCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.25)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   successCheck: {
     color: '#10B981',
-    fontSize: 28,
-    fontWeight: '700',
+    fontSize: 24,
+    fontWeight: '800',
   },
   modalTitle: {
-    color: '#F1F5F9',
     fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 6,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 4,
   },
   modalAmount: {
-    color: '#10B981',
     fontSize: 28,
     fontWeight: '800',
+    color: '#10B981',
     marginBottom: 20,
+    letterSpacing: -0.5,
   },
   modalDetailRow: {
     flexDirection: 'row',
@@ -743,32 +804,40 @@ const styles = StyleSheet.create({
   },
   modalLabel: {
     color: '#64748B',
-    fontSize: 13,
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
   },
   modalValue: {
-    color: '#E2E8F0',
-    fontSize: 13,
+    color: '#F1F5F9',
+    fontSize: 12,
     fontWeight: '600',
   },
   modalGasSaved: {
     color: '#10B981',
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
   },
   modalPrimaryBtn: {
     backgroundColor: '#6366F1',
     borderRadius: 10,
-    height: 44,
+    height: 48,
     width: '100%',
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 20,
     marginBottom: 10,
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   modalPrimaryBtnText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
+    letterSpacing: 0.2,
   },
   modalSecondaryBtn: {
     height: 40,
