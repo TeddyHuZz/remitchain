@@ -66,3 +66,11 @@ if (typeof urlModule.pathToFileURL === 'undefined') {
     };
   };
 }
+
+// Bypass React Native DevTools Network Inspector for Web3 requests (prevents "Could not load bundle" error on design-reverted HTTP 500 calls)
+if (typeof (global as any).originalXMLHttpRequest !== 'undefined') {
+  global.XMLHttpRequest = (global as any).originalXMLHttpRequest;
+}
+if (typeof (global as any).originalFetch !== 'undefined') {
+  global.fetch = (global as any).originalFetch;
+}

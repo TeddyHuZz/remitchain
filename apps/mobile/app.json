@@ -2,15 +2,21 @@
   "expo": {
     "name": "mobile",
     "slug": "mobile",
-    "scheme": "remitchain",
+    "scheme": [
+      "remitchain",
+      "com.googleusercontent.apps.911002916626-j0jq68cipmbq34bnueqq0feq4eu1nsqn",
+      "com.googleusercontent.apps.911002916626-evjj3722fjgc1puddbev8v2tp9bdckov"
+    ],
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.remitchain.mobile"
     },
     "android": {
+      "package": "com.remitchain.mobile",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",

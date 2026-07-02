@@ -29,10 +29,10 @@
     "typescript": "~6.0.3"
   },
   "scripts": {
-    "dev": "expo start",
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "dev": "EXPO_NO_METRO_LAZY=1 expo start",
+    "start": "EXPO_NO_METRO_LAZY=1 expo start",
+    "android": "EXPO_NO_METRO_LAZY=1 expo run:android",
+    "ios": "EXPO_NO_METRO_LAZY=1 expo run:ios",
     "web": "expo start --web",
     "check-types": "tsc --noEmit"
   },
