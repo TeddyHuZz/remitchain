@@ -19,8 +19,8 @@ export const WEB3_CONFIG = {
   GOOGLE_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || "",
   
   // RPC configurations for ZeroDev v3 Multi-Chain API
-  BUNDLER_URL: (projectId: string, chainId = 80002) => `https://rpc.zerodev.app/api/v3/${projectId}/chain/${chainId}`,
-  PAYMASTER_URL: (projectId: string, chainId = 80002) => `https://rpc.zerodev.app/api/v3/${projectId}/chain/${chainId}`,
+  BUNDLER_URL: (projectId: string, chainId = 80002) => `https://rpc.zerodev.app/api/v3/${projectId}/chain/${chainId}?selfFunded=true`,
+  PAYMASTER_URL: (projectId: string, chainId = 80002) => `https://rpc.zerodev.app/api/v3/${projectId}/chain/${chainId}?selfFunded=true`,
   
   // Public Polygon Amoy RPC for read-only actions (using official node to prevent 500 DevTools interception)
   PUBLIC_RPC_URL: "https://rpc-amoy.polygon.technology/",

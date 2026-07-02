@@ -10,6 +10,8 @@ import {
   Clipboard,
   Platform,
   Linking,
+  ScrollView,
+  Modal, // Added for transaction complete success overlay
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
@@ -34,7 +36,8 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
   const [amount, setAmount] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [txProgress, setTxProgress] = useState('');
-  const [recentTx, setRecentTx] = useState<{ hash: string; saved: string } | null>(null);
+  const [recentTx, setRecentTx] = useState<{ hash: string; saved: string; amount: string; recipient: string } | null>(null);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
 
   // Custom transactions submitted in this session
   const [customTxs, setCustomTxs] = useState<TxItem[]>([]);
@@ -142,9 +145,11 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
       setRecentTx({
         hash: result.txHash,
         saved: result.gasSaved,
+        amount: amount.trim(),
+        recipient: recipient.trim(),
       });
+      setShowReceiptModal(true);
 
-      Alert.alert("Success", "Gasless transaction completed successfully!");
       setRecipient('');
       setAmount('');
       await fetchBalance();
@@ -170,7 +175,11 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
       case 'dashboard':
       default:
         return (
-          <View style={styles.tabContent}>
+          <ScrollView 
+            style={styles.tabContent} 
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+          >
             {/* Smart Card */}
             <View style={styles.card}>
               <View style={styles.cardHeader}>
@@ -280,22 +289,8 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
                 </View>
               )}
 
-              {recentTx && (
-                <View style={styles.receiptContainer}>
-                  <Text style={styles.receiptHeader}>Transaction Complete</Text>
-                  <Text style={styles.receiptLabel}>Transaction Hash:</Text>
-                  <TouchableOpacity onPress={() => Linking.openURL(`https://amoy.polygonscan.com/tx/${recentTx.hash}`)} activeOpacity={0.7}>
-                    <Text style={styles.receiptHash} numberOfLines={1} ellipsizeMode="middle">
-                      {recentTx.hash} 🔗
-                    </Text>
-                  </TouchableOpacity>
-                  <Text style={styles.receiptSavings}>
-                    Saved: {recentTx.saved}
-                  </Text>
-                </View>
-              )}
             </View>
-          </View>
+          </ScrollView>
         );
     }
   };
@@ -356,6 +351,72 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* High-Fidelity Transaction Success Modal */}
+      {recentTx && (
+        <Modal
+          visible={showReceiptModal}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => {
+            setShowReceiptModal(false);
+            setRecentTx(null);
+          }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <View style={styles.successIconCircle}>
+                <Text style={styles.successIconCheck}>✓</Text>
+              </View>
+
+              <Text style={styles.modalTitle}>Remittance Sent!</Text>
+              <Text style={styles.modalAmount}>${recentTx.amount} USDC</Text>
+
+              <View style={styles.modalDetails}>
+                <View style={styles.modalDetailRow}>
+                  <Text style={styles.modalDetailLabel}>Recipient</Text>
+                  <Text style={styles.modalDetailValue} numberOfLines={1} ellipsizeMode="middle">
+                    {recentTx.recipient}
+                  </Text>
+                </View>
+
+                <View style={styles.modalDetailRow}>
+                  <Text style={styles.modalDetailLabel}>Status</Text>
+                  <Text style={styles.modalDetailStatus}>🟢 Completed</Text>
+                </View>
+
+                {recentTx.saved && (
+                  <View style={styles.modalDetailRow}>
+                    <Text style={styles.modalDetailLabel}>Gas Fee</Text>
+                    <Text style={styles.modalDetailSavings}>⚡ Sponsored ({recentTx.saved})</Text>
+                  </View>
+                )}
+              </View>
+
+              <TouchableOpacity
+                style={styles.modalPrimaryBtn}
+                onPress={() => {
+                  Linking.openURL(`https://amoy.polygonscan.com/tx/${recentTx.hash}`);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalPrimaryBtnText}>View on Explorer ↗</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.modalSecondaryBtn}
+                onPress={() => {
+                  setShowReceiptModal(false);
+                  setRecentTx(null);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.modalSecondaryBtnText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -731,5 +792,121 @@ const styles = StyleSheet.create({
   },
   tabActiveText: {
     color: '#818CF8',
+  },
+  scrollContent: {
+    paddingBottom: 24,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(7, 9, 19, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: '#0E1120',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#1E293B',
+    padding: 24,
+    width: '100%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  successIconCircle: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  successIconCheck: {
+    color: '#10B981',
+    fontSize: 24,
+    fontWeight: '800',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  modalAmount: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 20,
+    letterSpacing: -0.5,
+  },
+  modalDetails: {
+    backgroundColor: '#070913',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1E293B',
+    padding: 14,
+    width: '100%',
+    marginBottom: 20,
+  },
+  modalDetailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  modalDetailLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  modalDetailValue: {
+    fontSize: 12,
+    color: '#F1F5F9',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontWeight: '600',
+    maxWidth: '60%',
+  },
+  modalDetailStatus: {
+    fontSize: 12,
+    color: '#10B981',
+    fontWeight: '700',
+  },
+  modalDetailSavings: {
+    fontSize: 11,
+    color: '#10B981',
+    fontWeight: '700',
+  },
+  modalPrimaryBtn: {
+    backgroundColor: '#6366F1',
+    borderRadius: 10,
+    height: 44,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  modalPrimaryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  modalSecondaryBtn: {
+    height: 40,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalSecondaryBtnText: {
+    color: '#64748B',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

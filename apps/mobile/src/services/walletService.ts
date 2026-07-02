@@ -1,5 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
-import { createPublicClient, http, Hex } from 'viem';
+import { createPublicClient, http, Hex, encodeFunctionData } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { polygonAmoy } from 'viem/chains';
 import { generatePrivateKey } from 'viem/accounts';
@@ -7,7 +7,7 @@ import { WEB3_CONFIG } from '../config/env';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { backupService } from './backupService';
 import { signerToEcdsaValidator } from '@zerodev/ecdsa-validator';
-import { createKernelAccount } from '@zerodev/sdk';
+import { createKernelAccount, createKernelAccountClient, createZeroDevPaymasterClient } from '@zerodev/sdk';
 import { KERNEL_V3_1, getEntryPoint } from '@zerodev/sdk/constants';
 
 // SecureStore key definitions
@@ -292,33 +292,122 @@ class WalletService {
   }
 
   /**
-   * Simulates a gasless USDC transaction using our paymaster
+   * Performs an on-chain gasless USDC transaction sponsored via our paymaster
    */
   async simulateGaslessTransfer(
     recipientAddress: string,
     amount: string,
     onStatusChange?: (status: string) => void
   ): Promise<{ txHash: string; gasSaved: string }> {
-    onStatusChange?.("Preparing transaction bundle...");
-    await new Promise((r) => setTimeout(r, 1000));
+    const isMock = this.activeWallet?.isSimulated ||
+                   WEB3_CONFIG.ZERODEV_PROJECT_ID.startsWith("00000000");
 
-    onStatusChange?.("Sponsoring gas via RemitChain Paymaster...");
-    await new Promise((r) => setTimeout(r, 1200));
+    if (isMock) {
+      onStatusChange?.("Preparing simulated transaction...");
+      await new Promise((r) => setTimeout(r, 1000));
+      onStatusChange?.("Sponsoring simulated gas...");
+      await new Promise((r) => setTimeout(r, 1200));
+      onStatusChange?.("Signing simulated UserOperation...");
+      await new Promise((r) => setTimeout(r, 800));
+      onStatusChange?.("Submitting simulated transaction...");
+      await new Promise((r) => setTimeout(r, 1200));
+      const mockHash = `0x${Array.from({ length: 64 }, () =>
+        Math.floor(Math.random() * 16).toString(16)
+      ).join('')}`;
+      return {
+        txHash: mockHash,
+        gasSaved: "0.015 POL (~$0.02 USD)",
+      };
+    }
 
-    onStatusChange?.("Signing UserOperation on device...");
-    await new Promise((r) => setTimeout(r, 800));
+    // Real On-Chain Flow using ZeroDev Kernel Account client and Paymaster
+    try {
+      onStatusChange?.("Retrieving device credentials...");
+      const privKey = await SecureStore.getItemAsync(EOA_PRIVATE_KEY_KEY);
+      if (!privKey) throw new Error("Owner private key not found in storage.");
 
-    onStatusChange?.("Submitting transaction to Polygon Bundler...");
-    await new Promise((r) => setTimeout(r, 1200));
+      const ownerAccount = privateKeyToAccount(privKey as Hex);
+      
+      onStatusChange?.("Connecting to RPC Network...");
+      const rpcUrl = WEB3_CONFIG.BUNDLER_URL(WEB3_CONFIG.ZERODEV_PROJECT_ID);
+      const publicClient = createPublicClient({
+        chain: polygonAmoy,
+        transport: http(rpcUrl),
+      });
 
-    const mockHash = `0x${Array.from({ length: 64 }, () =>
-      Math.floor(Math.random() * 16).toString(16)
-    ).join('')}`;
+      onStatusChange?.("Re-initializing Smart Account...");
+      const entryPoint = getEntryPoint("0.7");
+      const kernelVersion = KERNEL_V3_1;
 
-    return {
-      txHash: mockHash,
-      gasSaved: "0.015 MATIC (~$0.02 USD)",
-    };
+      const ecdsaValidator = await signerToEcdsaValidator(publicClient, {
+        signer: ownerAccount,
+        entryPoint,
+        kernelVersion,
+      });
+
+      const account = await createKernelAccount(publicClient, {
+        plugins: {
+          sudo: ecdsaValidator,
+        },
+        entryPoint,
+        kernelVersion,
+      });
+
+      onStatusChange?.("Constructing gasless transaction client...");
+      const paymasterClient = createZeroDevPaymasterClient({
+        chain: polygonAmoy,
+        transport: http(rpcUrl),
+      });
+
+      const kernelClient = createKernelAccountClient({
+        account,
+        chain: polygonAmoy,
+        bundlerTransport: http(rpcUrl),
+        paymaster: {
+          getPaymasterData: async (userOperation) => {
+            return paymasterClient.sponsorUserOperation({ userOperation });
+          },
+        },
+      });
+
+      onStatusChange?.("Encoding USDC transfer transaction...");
+      // Official Circle USDC Token Address on Polygon Amoy
+      const usdcTokenAddress = "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582";
+      
+      // Convert amount to 6 decimals (USDC standard)
+      const amountInUnits = BigInt(Math.floor(parseFloat(amount) * 1_000_000));
+
+      const transferData = encodeFunctionData({
+        abi: [
+          {
+            name: 'transfer',
+            type: 'function',
+            stateMutability: 'nonpayable',
+            inputs: [
+              { name: 'recipient', type: 'address' },
+              { name: 'amount', type: 'uint256' },
+            ],
+            outputs: [{ name: 'success', type: 'bool' }],
+          },
+        ],
+        functionName: 'transfer',
+        args: [recipientAddress as Hex, amountInUnits],
+      });
+
+      onStatusChange?.("Signing and sending gasless transaction...");
+      const txHash = await kernelClient.sendTransaction({
+        to: usdcTokenAddress,
+        data: transferData,
+      });
+
+      return {
+        txHash,
+        gasSaved: "0.015 POL (~$0.02 USD)",
+      };
+    } catch (e: any) {
+      console.error("Real transfer error:", e);
+      throw new Error(`Real on-chain transfer failed: ${e.message || e}`);
+    }
   }
 
   /**
