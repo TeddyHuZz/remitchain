@@ -19,13 +19,14 @@ import { walletService, WalletState } from '../services/walletService';
 import BoothsTab, { BoothInfo } from './BoothsTab';
 import HistoryTab, { TxItem } from './HistoryTab';
 import ProfileTab from './ProfileTab';
+import YieldTab from './YieldTab';
 
 interface DashboardScreenProps {
   wallet: WalletState;
   onLogout: () => void;
 }
 
-type TabType = 'dashboard' | 'booths' | 'history' | 'profile';
+type TabType = 'dashboard' | 'booths' | 'history' | 'yield' | 'profile';
 
 export default function DashboardScreen({ wallet, onLogout }: DashboardScreenProps) {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
@@ -242,6 +243,19 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
         );
       case 'history':
         return <HistoryTab customTxs={customTxs} />;
+      case 'yield':
+        return (
+          <YieldTab
+            wallet={wallet}
+            walletBalance={balance}
+            onTransactionComplete={(tx: TxItem) => {
+              const updatedTxs = [tx, ...customTxs];
+              setCustomTxs(updatedTxs);
+              SecureStore.setItemAsync('remitchain_custom_txs', JSON.stringify(updatedTxs)).catch(() => {});
+            }}
+            onRefreshBalance={fetchBalance}
+          />
+        );
       case 'profile':
         return <ProfileTab wallet={wallet} onLogout={onLogout} />;
       case 'dashboard':
@@ -494,6 +508,15 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
           >
             <Text style={[styles.tabIcon, activeTab === 'history' && styles.tabActiveText]}>🕒</Text>
             <Text style={[styles.tabLabel, activeTab === 'history' && styles.tabActiveText]}>History</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.tabItem}
+            onPress={() => setActiveTab('yield')}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.tabIcon, activeTab === 'yield' && styles.tabActiveText]}>📈</Text>
+            <Text style={[styles.tabLabel, activeTab === 'yield' && styles.tabActiveText]}>Yield</Text>
           </TouchableOpacity>
 
           <TouchableOpacity

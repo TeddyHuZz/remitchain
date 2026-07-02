@@ -606,6 +606,322 @@ class WalletService {
       return "0.00";
     }
   }
+
+  // ─── Yield Vault Integration ─────────────────────────────────────────
+  // Contract Address: deployed on Polygon Amoy testnet.
+  // On mainnet, swap this for the Aave V3 Pool address.
+  private YIELD_VAULT_ADDRESS = (process.env.EXPO_PUBLIC_YIELD_VAULT_ADDRESS || "0x0000000000000000000000000000000000000000") as Hex;
+  private USDC_ADDRESS = "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582" as Hex;
+
+  private YIELD_VAULT_ABI = [
+    {
+      name: 'deposit',
+      type: 'function' as const,
+      stateMutability: 'nonpayable' as const,
+      inputs: [{ name: 'amount', type: 'uint256' }],
+      outputs: [],
+    },
+    {
+      name: 'withdraw',
+      type: 'function' as const,
+      stateMutability: 'nonpayable' as const,
+      inputs: [{ name: 'amount', type: 'uint256' }],
+      outputs: [],
+    },
+    {
+      name: 'balanceOf',
+      type: 'function' as const,
+      stateMutability: 'view' as const,
+      inputs: [{ name: 'user', type: 'address' }],
+      outputs: [{ name: '', type: 'uint256' }],
+    },
+    {
+      name: 'principalOf',
+      type: 'function' as const,
+      stateMutability: 'view' as const,
+      inputs: [{ name: 'user', type: 'address' }],
+      outputs: [{ name: '', type: 'uint256' }],
+    },
+    {
+      name: 'interestOf',
+      type: 'function' as const,
+      stateMutability: 'view' as const,
+      inputs: [{ name: 'user', type: 'address' }],
+      outputs: [{ name: '', type: 'uint256' }],
+    },
+    {
+      name: 'apyBps',
+      type: 'function' as const,
+      stateMutability: 'view' as const,
+      inputs: [],
+      outputs: [{ name: '', type: 'uint256' }],
+    },
+  ] as const;
+
+  private ERC20_APPROVE_ABI = [
+    {
+      name: 'approve',
+      type: 'function' as const,
+      stateMutability: 'nonpayable' as const,
+      inputs: [
+        { name: 'spender', type: 'address' },
+        { name: 'amount', type: 'uint256' },
+      ],
+      outputs: [{ name: 'success', type: 'bool' }],
+    },
+  ] as const;
+
+  /**
+   * Deposit USDC into the on-chain YieldVault.
+   * Uses a batched gasless UserOperation: approve + deposit in one click.
+   */
+  async depositToYield(
+    amount: string,
+    onStatusChange?: (status: string) => void
+  ): Promise<{ txHash: string; gasSaved: string }> {
+    const isMock = this.activeWallet?.isSimulated ||
+                   WEB3_CONFIG.ZERODEV_PROJECT_ID.startsWith("00000000");
+
+    if (isMock) {
+      onStatusChange?.("Simulated yield deposit...");
+      await new Promise((r) => setTimeout(r, 2000));
+      const mockHash = `0x${Array.from({ length: 64 }, () =>
+        Math.floor(Math.random() * 16).toString(16)
+      ).join('')}`;
+      return { txHash: mockHash, gasSaved: "0.020 POL (~$0.03 USD)" };
+    }
+
+    try {
+      onStatusChange?.("Retrieving credentials...");
+      const privKey = await SecureStore.getItemAsync(EOA_PRIVATE_KEY_KEY);
+      if (!privKey) throw new Error("Owner private key not found.");
+
+      const ownerAccount = privateKeyToAccount(privKey as Hex);
+
+      onStatusChange?.("Connecting to Polygon Amoy...");
+      const rpcUrl = WEB3_CONFIG.BUNDLER_URL(WEB3_CONFIG.ZERODEV_PROJECT_ID);
+      const publicClient = createPublicClient({
+        chain: polygonAmoy,
+        transport: http(rpcUrl),
+      });
+
+      onStatusChange?.("Initializing Smart Account...");
+      const entryPoint = getEntryPoint("0.7");
+      const kernelVersion = KERNEL_V3_1;
+
+      const ecdsaValidator = await signerToEcdsaValidator(publicClient, {
+        signer: ownerAccount,
+        entryPoint,
+        kernelVersion,
+      });
+
+      const account = await createKernelAccount(publicClient, {
+        plugins: { sudo: ecdsaValidator },
+        entryPoint,
+        kernelVersion,
+      });
+
+      onStatusChange?.("Setting up gasless paymaster...");
+      const paymasterClient = createZeroDevPaymasterClient({
+        chain: polygonAmoy,
+        transport: http(rpcUrl),
+      });
+
+      const kernelClient = createKernelAccountClient({
+        account,
+        chain: polygonAmoy,
+        bundlerTransport: http(rpcUrl),
+        paymaster: {
+          getPaymasterData: async (userOperation) => {
+            return paymasterClient.sponsorUserOperation({ userOperation });
+          },
+        },
+      });
+
+      onStatusChange?.("Encoding approve + deposit batch...");
+      const amountInUnits = BigInt(Math.floor(parseFloat(amount) * 1_000_000));
+
+      const approveData = encodeFunctionData({
+        abi: this.ERC20_APPROVE_ABI,
+        functionName: 'approve',
+        args: [this.YIELD_VAULT_ADDRESS, amountInUnits],
+      });
+
+      const depositData = encodeFunctionData({
+        abi: this.YIELD_VAULT_ABI,
+        functionName: 'deposit',
+        args: [amountInUnits],
+      });
+
+      onStatusChange?.("Signing & sending gasless batch transaction...");
+      const txHash = await kernelClient.sendTransaction({
+        calls: [
+          { to: this.USDC_ADDRESS, data: approveData },
+          { to: this.YIELD_VAULT_ADDRESS, data: depositData },
+        ],
+      });
+
+      return { txHash, gasSaved: "0.020 POL (~$0.03 USD)" };
+    } catch (e: any) {
+      console.error("Yield deposit error:", e);
+      throw new Error(`Yield deposit failed: ${e.message || e}`);
+    }
+  }
+
+  /**
+   * Withdraw USDC (principal + interest) from the on-chain YieldVault.
+   */
+  async withdrawFromYield(
+    amount: string,
+    onStatusChange?: (status: string) => void
+  ): Promise<{ txHash: string; gasSaved: string }> {
+    const isMock = this.activeWallet?.isSimulated ||
+                   WEB3_CONFIG.ZERODEV_PROJECT_ID.startsWith("00000000");
+
+    if (isMock) {
+      onStatusChange?.("Simulated yield withdrawal...");
+      await new Promise((r) => setTimeout(r, 2000));
+      const mockHash = `0x${Array.from({ length: 64 }, () =>
+        Math.floor(Math.random() * 16).toString(16)
+      ).join('')}`;
+      return { txHash: mockHash, gasSaved: "0.015 POL (~$0.02 USD)" };
+    }
+
+    try {
+      onStatusChange?.("Retrieving credentials...");
+      const privKey = await SecureStore.getItemAsync(EOA_PRIVATE_KEY_KEY);
+      if (!privKey) throw new Error("Owner private key not found.");
+
+      const ownerAccount = privateKeyToAccount(privKey as Hex);
+
+      onStatusChange?.("Connecting to Polygon Amoy...");
+      const rpcUrl = WEB3_CONFIG.BUNDLER_URL(WEB3_CONFIG.ZERODEV_PROJECT_ID);
+      const publicClient = createPublicClient({
+        chain: polygonAmoy,
+        transport: http(rpcUrl),
+      });
+
+      onStatusChange?.("Initializing Smart Account...");
+      const entryPoint = getEntryPoint("0.7");
+      const kernelVersion = KERNEL_V3_1;
+
+      const ecdsaValidator = await signerToEcdsaValidator(publicClient, {
+        signer: ownerAccount,
+        entryPoint,
+        kernelVersion,
+      });
+
+      const account = await createKernelAccount(publicClient, {
+        plugins: { sudo: ecdsaValidator },
+        entryPoint,
+        kernelVersion,
+      });
+
+      onStatusChange?.("Setting up gasless paymaster...");
+      const paymasterClient = createZeroDevPaymasterClient({
+        chain: polygonAmoy,
+        transport: http(rpcUrl),
+      });
+
+      const kernelClient = createKernelAccountClient({
+        account,
+        chain: polygonAmoy,
+        bundlerTransport: http(rpcUrl),
+        paymaster: {
+          getPaymasterData: async (userOperation) => {
+            return paymasterClient.sponsorUserOperation({ userOperation });
+          },
+        },
+      });
+
+      onStatusChange?.("Encoding withdrawal transaction...");
+      // Use max uint256 for full withdrawal, otherwise use specified amount
+      const amountInUnits = amount === 'MAX'
+        ? BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+        : BigInt(Math.floor(parseFloat(amount) * 1_000_000));
+
+      const withdrawData = encodeFunctionData({
+        abi: this.YIELD_VAULT_ABI,
+        functionName: 'withdraw',
+        args: [amountInUnits],
+      });
+
+      onStatusChange?.("Signing & sending gasless withdrawal...");
+      const txHash = await kernelClient.sendTransaction({
+        to: this.YIELD_VAULT_ADDRESS,
+        data: withdrawData,
+      });
+
+      return { txHash, gasSaved: "0.015 POL (~$0.02 USD)" };
+    } catch (e: any) {
+      console.error("Yield withdrawal error:", e);
+      throw new Error(`Yield withdrawal failed: ${e.message || e}`);
+    }
+  }
+
+  /**
+   * Query the on-chain YieldVault for a user's yield balance, principal, and interest.
+   */
+  async getYieldBalance(address: string, isSimulated = false): Promise<{
+    total: string;
+    principal: string;
+    interest: string;
+    apyBps: number;
+  }> {
+    const isMock = isSimulated ||
+                   address.startsWith("0x3a4b") ||
+                   address.startsWith("0x7f3e") ||
+                   WEB3_CONFIG.ZERODEV_PROJECT_ID.startsWith("00000000") ||
+                   this.YIELD_VAULT_ADDRESS === "0x0000000000000000000000000000000000000000";
+
+    if (isMock) {
+      return { total: "0.00", principal: "0.00", interest: "0.000000", apyBps: 450 };
+    }
+
+    try {
+      const publicClient = createPublicClient({
+        chain: polygonAmoy,
+        transport: http(WEB3_CONFIG.PUBLIC_RPC_URL),
+      });
+
+      const [totalRaw, principalRaw, interestRaw, apyBpsRaw] = await Promise.all([
+        publicClient.readContract({
+          address: this.YIELD_VAULT_ADDRESS,
+          abi: this.YIELD_VAULT_ABI,
+          functionName: 'balanceOf',
+          args: [address as Hex],
+        }) as Promise<bigint>,
+        publicClient.readContract({
+          address: this.YIELD_VAULT_ADDRESS,
+          abi: this.YIELD_VAULT_ABI,
+          functionName: 'principalOf',
+          args: [address as Hex],
+        }) as Promise<bigint>,
+        publicClient.readContract({
+          address: this.YIELD_VAULT_ADDRESS,
+          abi: this.YIELD_VAULT_ABI,
+          functionName: 'interestOf',
+          args: [address as Hex],
+        }) as Promise<bigint>,
+        publicClient.readContract({
+          address: this.YIELD_VAULT_ADDRESS,
+          abi: this.YIELD_VAULT_ABI,
+          functionName: 'apyBps',
+        }) as Promise<bigint>,
+      ]);
+
+      return {
+        total: (Number(totalRaw) / 1_000_000).toFixed(2),
+        principal: (Number(principalRaw) / 1_000_000).toFixed(2),
+        interest: (Number(interestRaw) / 1_000_000).toFixed(6),
+        apyBps: Number(apyBpsRaw),
+      };
+    } catch (e) {
+      console.warn("Failed to fetch yield balance:", e);
+      return { total: "0.00", principal: "0.00", interest: "0.000000", apyBps: 450 };
+    }
+  }
 }
 
 export const walletService = new WalletService();
+

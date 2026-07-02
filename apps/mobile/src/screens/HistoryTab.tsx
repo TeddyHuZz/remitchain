@@ -12,7 +12,7 @@ import {
 
 export interface TxItem {
   id: string;
-  type: 'send' | 'receive' | 'faucet' | 'split';
+  type: 'send' | 'receive' | 'faucet' | 'split' | 'yield_deposit' | 'yield_withdraw';
   amount: string;
   recipientOrSender: string;
   timestamp: string;
@@ -50,6 +50,8 @@ export default function HistoryTab({ customTxs }: HistoryTabProps) {
     const isSend = item.type === 'send';
     const isSplit = item.type === 'split';
     const isFaucet = item.type === 'faucet';
+    const isYieldDeposit = item.type === 'yield_deposit';
+    const isYieldWithdraw = item.type === 'yield_withdraw';
     const isExpanded = expandedId === item.id;
 
     return (
@@ -63,20 +65,20 @@ export default function HistoryTab({ customTxs }: HistoryTabProps) {
           <View style={styles.leftCol}>
             <View style={styles.iconCircle}>
               <Text style={styles.iconArrow}>
-                {isSplit ? '⇆' : isSend ? '↓' : isFaucet ? '⚡' : '↑'}
+                {isYieldDeposit ? '📈' : isYieldWithdraw ? '📤' : isSplit ? '⇆' : isSend ? '↓' : isFaucet ? '⚡' : '↑'}
               </Text>
             </View>
             <View>
               <Text style={styles.titleText}>
-                {isSplit ? 'Split Remittance' : isSend ? 'Remittance Sent' : isFaucet ? 'USDC Faucet Claim' : 'Funds Received'}
+                {isYieldDeposit ? 'Yield Deposit' : isYieldWithdraw ? 'Yield Withdrawal' : isSplit ? 'Split Remittance' : isSend ? 'Remittance Sent' : isFaucet ? 'USDC Faucet Claim' : 'Funds Received'}
               </Text>
               <Text style={styles.dateText}>{item.timestamp}</Text>
             </View>
           </View>
 
           <View style={styles.rightCol}>
-            <Text style={[styles.amountText, (isSend || isSplit) ? styles.amountSend : styles.amountReceive]}>
-              {(isSend || isSplit) ? '-' : '+'}${item.amount}
+            <Text style={[styles.amountText, (isSend || isSplit || isYieldDeposit) ? styles.amountSend : styles.amountReceive]}>
+              {(isSend || isSplit || isYieldDeposit) ? '-' : '+'}${item.amount}
             </Text>
             <Text style={styles.statusIndicator}>Success</Text>
           </View>
@@ -87,7 +89,7 @@ export default function HistoryTab({ customTxs }: HistoryTabProps) {
           <View style={styles.detailsPane}>
             <View style={styles.detailsRow}>
               <Text style={styles.detailsLabel}>
-                {isSplit ? 'Distribution' : isSend ? 'Recipient Wallet' : 'Sender Wallet'}
+                {isYieldDeposit ? 'Yield Vault' : isYieldWithdraw ? 'Yield Vault' : isSplit ? 'Distribution' : isSend ? 'Recipient Wallet' : 'Sender Wallet'}
               </Text>
               <Text style={styles.detailsValue} numberOfLines={2} ellipsizeMode="tail">
                 {item.recipientOrSender}
