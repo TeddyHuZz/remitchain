@@ -9,32 +9,63 @@ import {
   Alert,
   Clipboard,
   Platform,
-  Linking, // Used to open Explorer & Faucet links in browser
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as SecureStore from 'expo-secure-store';
 import { walletService, WalletState } from '../services/walletService';
+import BoothsTab, { BoothInfo } from './BoothsTab';
+import HistoryTab, { TxItem } from './HistoryTab';
+import ProfileTab from './ProfileTab';
 
 interface DashboardScreenProps {
   wallet: WalletState;
   onLogout: () => void;
 }
 
+type TabType = 'dashboard' | 'booths' | 'history' | 'profile';
+
 export default function DashboardScreen({ wallet, onLogout }: DashboardScreenProps) {
+  const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [copied, setCopied] = useState(false);
+  
+  // Send transaction inputs
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [txProgress, setTxProgress] = useState('');
   const [recentTx, setRecentTx] = useState<{ hash: string; saved: string } | null>(null);
 
+  // Custom transactions submitted in this session
+  const [customTxs, setCustomTxs] = useState<TxItem[]>([]);
+
+
+
   // Real USDC balance state
   const [balance, setBalance] = useState('0.00');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Fetch balance on load
+  // Load stored data on mount
+  useEffect(() => {
+    loadStoredData();
+  }, []);
+
+  // Fetch balance when address updates
   useEffect(() => {
     fetchBalance();
   }, [wallet.smartAccountAddress]);
+
+  const loadStoredData = async () => {
+    try {
+
+      const storedTxs = await SecureStore.getItemAsync('remitchain_custom_txs');
+      if (storedTxs) {
+        setCustomTxs(JSON.parse(storedTxs));
+      }
+    } catch (e) {
+      console.warn("Failed to load stored session data:", e);
+    }
+  };
 
   const fetchBalance = async () => {
     setIsRefreshing(true);
@@ -59,6 +90,14 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
     }
   };
 
+
+
+  const handleSelectBooth = (boothAddress: string) => {
+    setRecipient(boothAddress);
+    setActiveTab('dashboard');
+    Alert.alert("Booth Selected", "Recipient address has been pre-filled with the booth's Smart Account.");
+  };
+
   const handleSendTransfer = async () => {
     if (!recipient.trim() || !amount.trim()) {
       Alert.alert("Error", "Please fill in recipient address and USDC amount.");
@@ -75,6 +114,31 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
         (status) => setTxProgress(status)
       );
 
+      const savedTx: TxItem = {
+        id: Date.now().toString(),
+        type: 'send',
+        amount: amount.trim(),
+        recipientOrSender: recipient.trim(),
+        timestamp: new Date().toLocaleString([], {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        status: 'success',
+        hash: result.txHash,
+        gasSaved: result.gasSaved,
+      };
+
+      const updatedTxs = [savedTx, ...customTxs];
+      setCustomTxs(updatedTxs);
+      try {
+        await SecureStore.setItemAsync('remitchain_custom_txs', JSON.stringify(updatedTxs));
+      } catch (e) {
+        console.warn("Failed to persist custom transaction:", e);
+      }
+
       setRecentTx({
         hash: result.txHash,
         saved: result.gasSaved,
@@ -83,7 +147,6 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
       Alert.alert("Success", "Gasless transaction completed successfully!");
       setRecipient('');
       setAmount('');
-      // Update balance automatically
       await fetchBalance();
     } catch (e: any) {
       Alert.alert("Transaction Failed", e.message || "Failed to submit transaction.");
@@ -92,143 +155,205 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
     }
   };
 
+  const renderActiveTabContent = () => {
+    switch (activeTab) {
+      case 'booths':
+        return (
+          <BoothsTab
+            onSelectBooth={handleSelectBooth}
+          />
+        );
+      case 'history':
+        return <HistoryTab customTxs={customTxs} />;
+      case 'profile':
+        return <ProfileTab wallet={wallet} onLogout={onLogout} />;
+      case 'dashboard':
+      default:
+        return (
+          <View style={styles.tabContent}>
+            {/* Smart Card */}
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>Smart Wallet Address</Text>
+                <View style={[styles.badge, wallet.isSimulated ? styles.badgeMock : styles.badgeLive]}>
+                  <Text style={styles.badgeText}>
+                    {wallet.isSimulated ? 'Simulation (Amoy)' : 'Live Amoy'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Address Pill */}
+              <TouchableOpacity style={styles.addressPill} onPress={copyAddress} activeOpacity={0.7}>
+                <Text style={styles.addressPillText} numberOfLines={1} ellipsizeMode="middle">
+                  {wallet.smartAccountAddress}
+                </Text>
+                <Text style={styles.addressPillIcon}>{copied ? '✅' : '📋'}</Text>
+              </TouchableOpacity>
+
+              <View style={styles.cardFooter}>
+                <View style={styles.gasBadge}>
+                  <Text style={styles.gasBadgeText}>Gas Sponsored</Text>
+                </View>
+                {wallet.isCloudSynced && (
+                  <Text style={styles.cloudBackupText}>☁️ Cloud Synced</Text>
+                )}
+              </View>
+            </View>
+
+            {/* Balance Card */}
+            <View style={styles.balanceContainer}>
+              <View style={styles.balanceHeader}>
+                <Text style={styles.balanceLabel}>Account Balance</Text>
+                <TouchableOpacity onPress={fetchBalance} disabled={isRefreshing} style={styles.refreshButton} activeOpacity={0.7}>
+                  {isRefreshing ? (
+                    <ActivityIndicator size="small" color="#818CF8" />
+                  ) : (
+                    <Text style={styles.refreshButtonText}>↻ Refresh</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+              <View style={styles.balanceBody}>
+                <Text style={styles.balanceAmount}>
+                  ${balance} <Text style={styles.currency}>USDC</Text>
+                </Text>
+                <Text style={styles.usdEquivalent}>≈ ${balance} USD</Text>
+              </View>
+            </View>
+
+            {/* Quick Action Tabs */}
+            <View style={styles.actionsRow}>
+              <TouchableOpacity style={styles.actionTab} onPress={copyAddress} activeOpacity={0.7}>
+                <Text style={styles.actionTabIcon}>📋</Text>
+                <Text style={styles.actionTabText}>{copied ? 'Copied' : 'Copy Address'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.actionTab} 
+                onPress={() => Linking.openURL(`https://amoy.polygonscan.com/address/${wallet.smartAccountAddress}`)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.actionTabIcon}>🔍</Text>
+                <Text style={styles.actionTabText}>Explorer</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Send Section */}
+            <View style={styles.sendCard}>
+              <Text style={styles.sendTitle}>Gasless Remittance Transfer</Text>
+              <Text style={styles.sendDescription}>
+                Send USDC to a family member or booth. Zero gas fees will be charged to you.
+              </Text>
+
+              {isSending ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color="#6366F1" />
+                  <Text style={styles.progressText}>{txProgress}</Text>
+                </View>
+              ) : (
+                <View>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Recipient Smart Wallet Address"
+                    placeholderTextColor="#64748B"
+                    value={recipient}
+                    onChangeText={setRecipient}
+                    autoCapitalize="none"
+                  />
+                  
+                  {/* Amount Input with MAX Button overlay */}
+                  <View style={styles.amountInputContainer}>
+                    <TextInput
+                      style={styles.amountInput}
+                      placeholder="USDC Amount"
+                      placeholderTextColor="#64748B"
+                      value={amount}
+                      onChangeText={setAmount}
+                      keyboardType="numeric"
+                    />
+                    <TouchableOpacity style={styles.maxButton} onPress={() => setAmount(balance)} activeOpacity={0.6}>
+                      <Text style={styles.maxButtonText}>MAX</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <TouchableOpacity style={styles.sendButton} onPress={handleSendTransfer} activeOpacity={0.8}>
+                    <Text style={styles.sendButtonText}>Send Gasless USDC</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {recentTx && (
+                <View style={styles.receiptContainer}>
+                  <Text style={styles.receiptHeader}>Transaction Complete</Text>
+                  <Text style={styles.receiptLabel}>Transaction Hash:</Text>
+                  <TouchableOpacity onPress={() => Linking.openURL(`https://amoy.polygonscan.com/tx/${recentTx.hash}`)} activeOpacity={0.7}>
+                    <Text style={styles.receiptHash} numberOfLines={1} ellipsizeMode="middle">
+                      {recentTx.hash} 🔗
+                    </Text>
+                  </TouchableOpacity>
+                  <Text style={styles.receiptSavings}>
+                    Saved: {recentTx.saved}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
+        );
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.headerTitle}>Welcome, {wallet.username}</Text>
-            <Text style={styles.headerSubtitle}>Polygon Smart Account Active</Text>
-          </View>
-          <TouchableOpacity style={styles.logoutButton} onPress={onLogout} activeOpacity={0.7}>
-            <Text style={styles.logoutText}>Sign Out</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Smart Card */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Smart Wallet Address</Text>
-            <View style={[styles.badge, wallet.isSimulated ? styles.badgeMock : styles.badgeLive]}>
-              <Text style={styles.badgeText}>
-                {wallet.isSimulated ? 'Simulation (Amoy)' : 'Live Amoy'}
-              </Text>
+        {/* Header (Shows only when on dashboard tab) */}
+        {activeTab === 'dashboard' && (
+          <View style={styles.header}>
+            <View>
+              <Text style={styles.headerTitle}>Welcome, {wallet.username}</Text>
+              <Text style={styles.headerSubtitle}>Polygon Smart Account Active</Text>
             </View>
           </View>
+        )}
 
-          {/* Address Pill */}
-          <TouchableOpacity style={styles.addressPill} onPress={copyAddress} activeOpacity={0.7}>
-            <Text style={styles.addressPillText} numberOfLines={1} ellipsizeMode="middle">
-              {wallet.smartAccountAddress}
-            </Text>
-            <Text style={styles.addressPillIcon}>{copied ? '✅' : '📋'}</Text>
-          </TouchableOpacity>
-
-          <View style={styles.cardFooter}>
-            <View style={styles.gasBadge}>
-              <Text style={styles.gasBadgeText}>Gas Sponsored</Text>
-            </View>
-            {wallet.isCloudSynced && (
-              <Text style={styles.cloudBackupText}>☁️ Cloud Synced</Text>
-            )}
-          </View>
+        <View style={styles.mainContainer}>
+          {renderActiveTabContent()}
         </View>
 
-        {/* Balance Card */}
-        <View style={styles.balanceContainer}>
-          <View style={styles.balanceHeader}>
-            <Text style={styles.balanceLabel}>Account Balance</Text>
-            <TouchableOpacity onPress={fetchBalance} disabled={isRefreshing} style={styles.refreshButton} activeOpacity={0.7}>
-              {isRefreshing ? (
-                <ActivityIndicator size="small" color="#818CF8" />
-              ) : (
-                <Text style={styles.refreshButtonText}>↻ Refresh</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-          <View style={styles.balanceBody}>
-            <Text style={styles.balanceAmount}>
-              ${balance} <Text style={styles.currency}>USDC</Text>
-            </Text>
-            <Text style={styles.usdEquivalent}>≈ ${balance} USD</Text>
-          </View>
-        </View>
-
-        {/* Quick Action Tabs */}
-        <View style={styles.actionsRow}>
-          <TouchableOpacity style={styles.actionTab} onPress={copyAddress} activeOpacity={0.7}>
-            <Text style={styles.actionTabIcon}>📋</Text>
-            <Text style={styles.actionTabText}>{copied ? 'Copied' : 'Copy Address'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.actionTab} 
-            onPress={() => Linking.openURL(`https://amoy.polygonscan.com/address/${wallet.smartAccountAddress}`)}
+        {/* Bottom Tab Navigation Bar */}
+        <View style={styles.tabBar}>
+          <TouchableOpacity
+            style={styles.tabItem}
+            onPress={() => setActiveTab('dashboard')}
             activeOpacity={0.7}
           >
-            <Text style={styles.actionTabIcon}>🔍</Text>
-            <Text style={styles.actionTabText}>Explorer</Text>
+            <Text style={[styles.tabIcon, activeTab === 'dashboard' && styles.tabActiveText]}>🏠</Text>
+            <Text style={[styles.tabLabel, activeTab === 'dashboard' && styles.tabActiveText]}>Dashboard</Text>
           </TouchableOpacity>
-        </View>
 
-        {/* Send Section */}
-        <View style={styles.sendCard}>
-          <Text style={styles.sendTitle}>Gasless Remittance Transfer</Text>
-          <Text style={styles.sendDescription}>
-            Send USDC to a family member or booth. Zero gas fees will be charged to you.
-          </Text>
+          <TouchableOpacity
+            style={styles.tabItem}
+            onPress={() => setActiveTab('booths')}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.tabIcon, activeTab === 'booths' && styles.tabActiveText]}>🏪</Text>
+            <Text style={[styles.tabLabel, activeTab === 'booths' && styles.tabActiveText]}>Booths</Text>
+          </TouchableOpacity>
 
-          {isSending ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color="#6366F1" />
-              <Text style={styles.progressText}>{txProgress}</Text>
-            </View>
-          ) : (
-            <View>
-              <TextInput
-                style={styles.input}
-                placeholder="Recipient Smart Wallet Address"
-                placeholderTextColor="#64748B"
-                value={recipient}
-                onChangeText={setRecipient}
-                autoCapitalize="none"
-              />
-              
-              {/* Amount Input with MAX Button overlay */}
-              <View style={styles.amountInputContainer}>
-                <TextInput
-                  style={styles.amountInput}
-                  placeholder="USDC Amount"
-                  placeholderTextColor="#64748B"
-                  value={amount}
-                  onChangeText={setAmount}
-                  keyboardType="numeric"
-                />
-                <TouchableOpacity style={styles.maxButton} onPress={() => setAmount(balance)} activeOpacity={0.6}>
-                  <Text style={styles.maxButtonText}>MAX</Text>
-                </TouchableOpacity>
-              </View>
+          <TouchableOpacity
+            style={styles.tabItem}
+            onPress={() => setActiveTab('history')}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.tabIcon, activeTab === 'history' && styles.tabActiveText]}>🕒</Text>
+            <Text style={[styles.tabLabel, activeTab === 'history' && styles.tabActiveText]}>History</Text>
+          </TouchableOpacity>
 
-              <TouchableOpacity style={styles.sendButton} onPress={handleSendTransfer} activeOpacity={0.8}>
-                <Text style={styles.sendButtonText}>Send Gasless USDC</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {recentTx && (
-            <View style={styles.receiptContainer}>
-              <Text style={styles.receiptHeader}>Transaction Complete</Text>
-              <Text style={styles.receiptLabel}>Transaction Hash:</Text>
-              <TouchableOpacity onPress={() => Linking.openURL(`https://amoy.polygonscan.com/tx/${recentTx.hash}`)} activeOpacity={0.7}>
-                <Text style={styles.receiptHash} numberOfLines={1} ellipsizeMode="middle">
-                  {recentTx.hash} 🔗
-                </Text>
-              </TouchableOpacity>
-              <Text style={styles.receiptSavings}>
-                Saved: {recentTx.saved}
-              </Text>
-            </View>
-          )}
+          <TouchableOpacity
+            style={styles.tabItem}
+            onPress={() => setActiveTab('profile')}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.tabIcon, activeTab === 'profile' && styles.tabActiveText]}>👤</Text>
+            <Text style={[styles.tabLabel, activeTab === 'profile' && styles.tabActiveText]}>Profile</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </SafeAreaView>
@@ -242,15 +367,11 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
+    paddingHorizontal: 20,
     marginTop: 10,
+    marginBottom: 10,
   },
   headerTitle: {
     fontSize: 22,
@@ -264,18 +385,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontWeight: '500',
   },
-  logoutButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    backgroundColor: 'rgba(244, 63, 94, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(244, 63, 94, 0.2)',
+  mainContainer: {
+    flex: 1,
+    paddingHorizontal: 20,
   },
-  logoutText: {
-    color: '#F43F5E',
-    fontSize: 12,
-    fontWeight: '700',
+  tabContent: {
+    flex: 1,
   },
   card: {
     backgroundColor: '#0E1120',
@@ -587,5 +702,34 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#10B981',
     fontWeight: '700',
+  },
+  tabBar: {
+    flexDirection: 'row',
+    height: 60,
+    backgroundColor: '#0E1120',
+    borderTopWidth: 1,
+    borderTopColor: '#1E293B',
+    paddingBottom: Platform.OS === 'ios' ? 12 : 6,
+    paddingTop: 6,
+    justifyContent: 'space-around',
+    alignItems: 'center',
+  },
+  tabItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+  },
+  tabIcon: {
+    fontSize: 18,
+    color: '#64748B',
+  },
+  tabLabel: {
+    fontSize: 10,
+    color: '#64748B',
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  tabActiveText: {
+    color: '#818CF8',
   },
 });
