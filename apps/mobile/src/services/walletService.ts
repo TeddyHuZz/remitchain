@@ -411,6 +411,157 @@ class WalletService {
   }
 
   /**
+   * Performs an on-chain gasless batched USDC transaction split between two recipients
+   */
+  async simulateGaslessSplitTransfer(
+    recipientA: string,
+    recipientB: string,
+    totalAmount: string,
+    pctA: number,
+    pctB: number,
+    onStatusChange?: (status: string) => void
+  ): Promise<{ txHash: string; gasSaved: string }> {
+    const isMock = this.activeWallet?.isSimulated ||
+                   WEB3_CONFIG.ZERODEV_PROJECT_ID.startsWith("00000000");
+
+    const amountA = (parseFloat(totalAmount) * pctA) / 100;
+    const amountB = (parseFloat(totalAmount) * pctB) / 100;
+
+    if (isMock) {
+      onStatusChange?.("Preparing simulated batched transaction...");
+      await new Promise((r) => setTimeout(r, 1000));
+      onStatusChange?.("Sponsoring simulated gas...");
+      await new Promise((r) => setTimeout(r, 1200));
+      onStatusChange?.("Signing batched UserOperation...");
+      await new Promise((r) => setTimeout(r, 800));
+      onStatusChange?.("Submitting batched transaction...");
+      await new Promise((r) => setTimeout(r, 1200));
+      const mockHash = `0x${Array.from({ length: 64 }, () =>
+        Math.floor(Math.random() * 16).toString(16)
+      ).join('')}`;
+      return {
+        txHash: mockHash,
+        gasSaved: "0.025 POL (~$0.03 USD)",
+      };
+    }
+
+    // Real On-Chain Batch Flow using ZeroDev Kernel Account client and Paymaster
+    try {
+      onStatusChange?.("Retrieving credentials...");
+      const privKey = await SecureStore.getItemAsync(EOA_PRIVATE_KEY_KEY);
+      if (!privKey) throw new Error("Owner private key not found in storage.");
+
+      const ownerAccount = privateKeyToAccount(privKey as Hex);
+      
+      onStatusChange?.("Connecting to RPC Network...");
+      const rpcUrl = WEB3_CONFIG.BUNDLER_URL(WEB3_CONFIG.ZERODEV_PROJECT_ID);
+      const publicClient = createPublicClient({
+        chain: polygonAmoy,
+        transport: http(rpcUrl),
+      });
+
+      onStatusChange?.("Re-initializing Smart Account...");
+      const entryPoint = getEntryPoint("0.7");
+      const kernelVersion = KERNEL_V3_1;
+
+      const ecdsaValidator = await signerToEcdsaValidator(publicClient, {
+        signer: ownerAccount,
+        entryPoint,
+        kernelVersion,
+      });
+
+      const account = await createKernelAccount(publicClient, {
+        plugins: {
+          sudo: ecdsaValidator,
+        },
+        entryPoint,
+        kernelVersion,
+      });
+
+      onStatusChange?.("Constructing gasless transaction client...");
+      const paymasterClient = createZeroDevPaymasterClient({
+        chain: polygonAmoy,
+        transport: http(rpcUrl),
+      });
+
+      const kernelClient = createKernelAccountClient({
+        account,
+        chain: polygonAmoy,
+        bundlerTransport: http(rpcUrl),
+        paymaster: {
+          getPaymasterData: async (userOperation) => {
+            return paymasterClient.sponsorUserOperation({ userOperation });
+          },
+        },
+      });
+
+      onStatusChange?.("Encoding batched USDC transfer transactions...");
+      // Official Circle USDC Token Address on Polygon Amoy
+      const usdcTokenAddress = "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582";
+      
+      // Convert amounts to 6 decimals (USDC standard)
+      const amountInUnitsA = BigInt(Math.floor(amountA * 1_000_000));
+      const amountInUnitsB = BigInt(Math.floor(amountB * 1_000_000));
+
+      const transferDataA = encodeFunctionData({
+        abi: [
+          {
+            name: 'transfer',
+            type: 'function',
+            stateMutability: 'nonpayable',
+            inputs: [
+              { name: 'recipient', type: 'address' },
+              { name: 'amount', type: 'uint256' },
+            ],
+            outputs: [{ name: 'success', type: 'bool' }],
+          },
+        ],
+        functionName: 'transfer',
+        args: [recipientA as Hex, amountInUnitsA],
+      });
+
+      const transferDataB = encodeFunctionData({
+        abi: [
+          {
+            name: 'transfer',
+            type: 'function',
+            stateMutability: 'nonpayable',
+            inputs: [
+              { name: 'recipient', type: 'address' },
+              { name: 'amount', type: 'uint256' },
+            ],
+            outputs: [{ name: 'success', type: 'bool' }],
+          },
+        ],
+        functionName: 'transfer',
+        args: [recipientB as Hex, amountInUnitsB],
+      });
+
+      onStatusChange?.("Signing and sending batched UserOperation...");
+      const txHash = await kernelClient.sendTransaction({
+        calls: [
+          {
+            to: usdcTokenAddress,
+            data: transferDataA,
+          },
+          {
+            to: usdcTokenAddress,
+            data: transferDataB,
+          },
+        ],
+      });
+
+      return {
+        txHash,
+        gasSaved: "0.025 POL (~$0.03 USD)",
+      };
+    } catch (e: any) {
+      console.error("Real batched transfer error:", e);
+      throw new Error(`Real on-chain batched transfer failed: ${e.message || e}`);
+    }
+  }
+
+  /**
    * Reads the real USDC token balance of the counterfactual Smart Account on-chain.
    */
   async getUSDCBalance(address: string, isSimulated = false): Promise<string> {

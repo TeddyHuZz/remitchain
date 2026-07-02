@@ -12,7 +12,7 @@ import {
 
 export interface TxItem {
   id: string;
-  type: 'send' | 'receive' | 'faucet';
+  type: 'send' | 'receive' | 'faucet' | 'split';
   amount: string;
   recipientOrSender: string;
   timestamp: string;
@@ -48,6 +48,7 @@ export default function HistoryTab({ customTxs }: HistoryTabProps) {
 
   const renderTx = ({ item }: { item: TxItem }) => {
     const isSend = item.type === 'send';
+    const isSplit = item.type === 'split';
     const isFaucet = item.type === 'faucet';
     const isExpanded = expandedId === item.id;
 
@@ -62,20 +63,20 @@ export default function HistoryTab({ customTxs }: HistoryTabProps) {
           <View style={styles.leftCol}>
             <View style={styles.iconCircle}>
               <Text style={styles.iconArrow}>
-                {isSend ? '↓' : isFaucet ? '⚡' : '↑'}
+                {isSplit ? '⇆' : isSend ? '↓' : isFaucet ? '⚡' : '↑'}
               </Text>
             </View>
             <View>
               <Text style={styles.titleText}>
-                {isSend ? 'Remittance Sent' : isFaucet ? 'USDC Faucet Claim' : 'Funds Received'}
+                {isSplit ? 'Split Remittance' : isSend ? 'Remittance Sent' : isFaucet ? 'USDC Faucet Claim' : 'Funds Received'}
               </Text>
               <Text style={styles.dateText}>{item.timestamp}</Text>
             </View>
           </View>
 
           <View style={styles.rightCol}>
-            <Text style={[styles.amountText, isSend ? styles.amountSend : styles.amountReceive]}>
-              {isSend ? '-' : '+'}${item.amount}
+            <Text style={[styles.amountText, (isSend || isSplit) ? styles.amountSend : styles.amountReceive]}>
+              {(isSend || isSplit) ? '-' : '+'}${item.amount}
             </Text>
             <Text style={styles.statusIndicator}>Success</Text>
           </View>
@@ -86,9 +87,9 @@ export default function HistoryTab({ customTxs }: HistoryTabProps) {
           <View style={styles.detailsPane}>
             <View style={styles.detailsRow}>
               <Text style={styles.detailsLabel}>
-                {isSend ? 'Recipient Wallet' : 'Sender Wallet'}
+                {isSplit ? 'Distribution' : isSend ? 'Recipient Wallet' : 'Sender Wallet'}
               </Text>
-              <Text style={styles.detailsValue} numberOfLines={1} ellipsizeMode="middle">
+              <Text style={styles.detailsValue} numberOfLines={2} ellipsizeMode="tail">
                 {item.recipientOrSender}
               </Text>
             </View>

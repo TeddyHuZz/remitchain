@@ -36,7 +36,22 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
   const [amount, setAmount] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [txProgress, setTxProgress] = useState('');
-  const [recentTx, setRecentTx] = useState<{ hash: string; saved: string; amount: string; recipient: string } | null>(null);
+  
+  // Split Remittance inputs
+  const [isSplit, setIsSplit] = useState(false);
+  const [savingsRecipient, setSavingsRecipient] = useState('');
+  const [splitRatio, setSplitRatio] = useState(80); // percentage to Family, rest is savings (100 - ratio)
+
+  const [recentTx, setRecentTx] = useState<{
+    hash: string;
+    saved: string;
+    amount: string;
+    recipient: string;
+    isSplit?: boolean;
+    recipientSavings?: string;
+    amountFamily?: string;
+    amountSavings?: string;
+  } | null>(null);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
 
   // Custom transactions submitted in this session
@@ -102,37 +117,100 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
   };
 
   const handleSendTransfer = async () => {
-    if (!recipient.trim() || !amount.trim()) {
-      Alert.alert("Error", "Please fill in recipient address and USDC amount.");
-      return;
+    if (isSplit) {
+      if (!recipient.trim() || !savingsRecipient.trim() || !amount.trim()) {
+        Alert.alert("Error", "Please fill in recipient addresses and total USDC amount.");
+        return;
+      }
+    } else {
+      if (!recipient.trim() || !amount.trim()) {
+        Alert.alert("Error", "Please fill in recipient address and USDC amount.");
+        return;
+      }
     }
 
     setIsSending(true);
     setRecentTx(null);
 
     try {
-      const result = await walletService.simulateGaslessTransfer(
-        recipient.trim(),
-        amount.trim(),
-        (status) => setTxProgress(status)
-      );
+      let result;
+      let savedTx: TxItem;
 
-      const savedTx: TxItem = {
-        id: Date.now().toString(),
-        type: 'send',
-        amount: amount.trim(),
-        recipientOrSender: recipient.trim(),
-        timestamp: new Date().toLocaleString([], {
-          month: 'short',
-          day: 'numeric',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-        }),
-        status: 'success',
-        hash: result.txHash,
-        gasSaved: result.gasSaved,
-      };
+      if (isSplit) {
+        const pctFamily = splitRatio;
+        const pctSavings = 100 - splitRatio;
+        const amountFamily = ((parseFloat(amount) * pctFamily) / 100).toFixed(2);
+        const amountSavings = ((parseFloat(amount) * pctSavings) / 100).toFixed(2);
+
+        result = await walletService.simulateGaslessSplitTransfer(
+          recipient.trim(),
+          savingsRecipient.trim(),
+          amount.trim(),
+          pctFamily,
+          pctSavings,
+          (status) => setTxProgress(status)
+        );
+
+        savedTx = {
+          id: Date.now().toString(),
+          type: 'split',
+          amount: amount.trim(),
+          recipientOrSender: `Split: $${amountFamily} to Family, $${amountSavings} to Savings`,
+          timestamp: new Date().toLocaleString([], {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          status: 'success',
+          hash: result.txHash,
+          gasSaved: result.gasSaved,
+        };
+
+        setRecentTx({
+          hash: result.txHash,
+          saved: result.gasSaved,
+          amount: amount.trim(),
+          recipient: recipient.trim(),
+          isSplit: true,
+          recipientSavings: savingsRecipient.trim(),
+          amountFamily,
+          amountSavings,
+        });
+
+      } else {
+        result = await walletService.simulateGaslessTransfer(
+          recipient.trim(),
+          amount.trim(),
+          (status) => setTxProgress(status)
+        );
+
+        savedTx = {
+          id: Date.now().toString(),
+          type: 'send',
+          amount: amount.trim(),
+          recipientOrSender: recipient.trim(),
+          timestamp: new Date().toLocaleString([], {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          status: 'success',
+          hash: result.txHash,
+          gasSaved: result.gasSaved,
+        };
+
+        setRecentTx({
+          hash: result.txHash,
+          saved: result.gasSaved,
+          amount: amount.trim(),
+          recipient: recipient.trim(),
+          isSplit: false,
+        });
+      }
 
       const updatedTxs = [savedTx, ...customTxs];
       setCustomTxs(updatedTxs);
@@ -142,15 +220,9 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
         console.warn("Failed to persist custom transaction:", e);
       }
 
-      setRecentTx({
-        hash: result.txHash,
-        saved: result.gasSaved,
-        amount: amount.trim(),
-        recipient: recipient.trim(),
-      });
       setShowReceiptModal(true);
-
       setRecipient('');
+      setSavingsRecipient('');
       setAmount('');
       await fetchBalance();
     } catch (e: any) {
@@ -252,6 +324,28 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
                 Send USDC to a family member or booth. Zero gas fees will be charged to you.
               </Text>
 
+              {/* Segmented Toggle Control */}
+              <View style={styles.splitToggleContainer}>
+                <TouchableOpacity 
+                  style={[styles.splitToggleButton, !isSplit && styles.splitToggleButtonActive]}
+                  onPress={() => setIsSplit(false)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.splitToggleText, !isSplit && styles.splitToggleTextActive]}>
+                    Single Recipient
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.splitToggleButton, isSplit && styles.splitToggleButtonActive]}
+                  onPress={() => setIsSplit(true)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.splitToggleText, isSplit && styles.splitToggleTextActive]}>
+                    Split Distribution
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
               {isSending ? (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="small" color="#6366F1" />
@@ -259,20 +353,73 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
                 </View>
               ) : (
                 <View>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Recipient Smart Wallet Address"
-                    placeholderTextColor="#64748B"
-                    value={recipient}
-                    onChangeText={setRecipient}
-                    autoCapitalize="none"
-                  />
+                  {!isSplit ? (
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Recipient Smart Wallet Address"
+                      placeholderTextColor="#64748B"
+                      value={recipient}
+                      onChangeText={setRecipient}
+                      autoCapitalize="none"
+                    />
+                  ) : (
+                    <View style={styles.splitInputGroup}>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Family Recipient Address (starts with 0x...)"
+                        placeholderTextColor="#64748B"
+                        value={recipient}
+                        onChangeText={setRecipient}
+                        autoCapitalize="none"
+                      />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Savings Recipient Address (e.g. your MetaMask)"
+                        placeholderTextColor="#64748B"
+                        value={savingsRecipient}
+                        onChangeText={setSavingsRecipient}
+                        autoCapitalize="none"
+                      />
+
+                      {/* Split ratio selector */}
+                      <Text style={styles.ratioSectionLabel}>Choose Split Ratio</Text>
+                      <View style={styles.ratioContainer}>
+                        <TouchableOpacity 
+                          style={[styles.ratioButton, splitRatio === 80 && styles.ratioButtonActive]}
+                          onPress={() => setSplitRatio(80)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[styles.ratioText, splitRatio === 80 && styles.ratioTextActive]}>
+                            80/20 Split
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={[styles.ratioButton, splitRatio === 70 && styles.ratioButtonActive]}
+                          onPress={() => setSplitRatio(70)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[styles.ratioText, splitRatio === 70 && styles.ratioTextActive]}>
+                            70/30 Split
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={[styles.ratioButton, splitRatio === 50 && styles.ratioButtonActive]}
+                          onPress={() => setSplitRatio(50)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[styles.ratioText, splitRatio === 50 && styles.ratioTextActive]}>
+                            50/50 Split
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
                   
                   {/* Amount Input with MAX Button overlay */}
                   <View style={styles.amountInputContainer}>
                     <TextInput
                       style={styles.amountInput}
-                      placeholder="USDC Amount"
+                      placeholder={isSplit ? "Total USDC Amount to Split" : "USDC Amount"}
                       placeholderTextColor="#64748B"
                       value={amount}
                       onChangeText={setAmount}
@@ -283,12 +430,20 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
                     </TouchableOpacity>
                   </View>
 
+                  {/* Dynamic split breakdown info text */}
+                  {isSplit && amount.trim() !== '' && !isNaN(parseFloat(amount)) && (
+                    <Text style={styles.breakdownText}>
+                      This sends ${(parseFloat(amount) * splitRatio / 100).toFixed(2)} USDC to Family and ${(parseFloat(amount) * (100 - splitRatio) / 100).toFixed(2)} USDC to Savings in a single atomic transaction.
+                    </Text>
+                  )}
+
                   <TouchableOpacity style={styles.sendButton} onPress={handleSendTransfer} activeOpacity={0.8}>
-                    <Text style={styles.sendButtonText}>Send Gasless USDC</Text>
+                    <Text style={styles.sendButtonText}>
+                      {isSplit ? "Send Split Remittance" : "Send Gasless USDC"}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               )}
-
             </View>
           </ScrollView>
         );
@@ -372,26 +527,58 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
               <Text style={styles.modalTitle}>Remittance Sent!</Text>
               <Text style={styles.modalAmount}>${recentTx.amount} USDC</Text>
 
-              <View style={styles.modalDetails}>
-                <View style={styles.modalDetailRow}>
-                  <Text style={styles.modalDetailLabel}>Recipient</Text>
-                  <Text style={styles.modalDetailValue} numberOfLines={1} ellipsizeMode="middle">
-                    {recentTx.recipient}
-                  </Text>
-                </View>
-
-                <View style={styles.modalDetailRow}>
-                  <Text style={styles.modalDetailLabel}>Status</Text>
-                  <Text style={styles.modalDetailStatus}>🟢 Completed</Text>
-                </View>
-
-                {recentTx.saved && (
+              {recentTx.isSplit ? (
+                <View style={styles.modalDetails}>
                   <View style={styles.modalDetailRow}>
-                    <Text style={styles.modalDetailLabel}>Gas Fee</Text>
-                    <Text style={styles.modalDetailSavings}>⚡ Sponsored ({recentTx.saved})</Text>
+                    <Text style={styles.modalDetailLabel}>To Family ({splitRatio}%)</Text>
+                    <Text style={styles.modalDetailValue} numberOfLines={1} ellipsizeMode="middle">
+                      {recentTx.recipient}
+                    </Text>
                   </View>
-                )}
-              </View>
+                  <Text style={styles.modalSplitSubText}>Amount: ${recentTx.amountFamily} USDC</Text>
+
+                  <View style={styles.modalDetailRow}>
+                    <Text style={styles.modalDetailLabel}>To Savings ({100 - splitRatio}%)</Text>
+                    <Text style={styles.modalDetailValue} numberOfLines={1} ellipsizeMode="middle">
+                      {recentTx.recipientSavings}
+                    </Text>
+                  </View>
+                  <Text style={styles.modalSplitSubText}>Amount: ${recentTx.amountSavings} USDC</Text>
+
+                  <View style={styles.modalDetailRow}>
+                    <Text style={styles.modalDetailLabel}>Status</Text>
+                    <Text style={styles.modalDetailStatus}>🟢 Completed (Batch)</Text>
+                  </View>
+
+                  {recentTx.saved && (
+                    <View style={styles.modalDetailRow}>
+                      <Text style={styles.modalDetailLabel}>Gas Fee</Text>
+                      <Text style={styles.modalDetailSavings}>⚡ Sponsored ({recentTx.saved})</Text>
+                    </View>
+                  )}
+                </View>
+              ) : (
+                <View style={styles.modalDetails}>
+                  <View style={styles.modalDetailRow}>
+                    <Text style={styles.modalDetailLabel}>Recipient</Text>
+                    <Text style={styles.modalDetailValue} numberOfLines={1} ellipsizeMode="middle">
+                      {recentTx.recipient}
+                    </Text>
+                  </View>
+
+                  <View style={styles.modalDetailRow}>
+                    <Text style={styles.modalDetailLabel}>Status</Text>
+                    <Text style={styles.modalDetailStatus}>🟢 Completed</Text>
+                  </View>
+
+                  {recentTx.saved && (
+                    <View style={styles.modalDetailRow}>
+                      <Text style={styles.modalDetailLabel}>Gas Fee</Text>
+                      <Text style={styles.modalDetailSavings}>⚡ Sponsored ({recentTx.saved})</Text>
+                    </View>
+                  )}
+                </View>
+              )}
 
               <TouchableOpacity
                 style={styles.modalPrimaryBtn}
@@ -883,6 +1070,91 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#10B981',
     fontWeight: '700',
+  },
+  modalSplitSubText: {
+    fontSize: 11,
+    color: '#94A3B8',
+    alignSelf: 'flex-start',
+    paddingLeft: 12,
+    marginBottom: 8,
+    marginTop: -4,
+    fontWeight: '500',
+  },
+  splitToggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#070913',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#1E293B',
+    padding: 3,
+    marginBottom: 12,
+  },
+  splitToggleButton: {
+    flex: 1,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 6,
+  },
+  splitToggleButtonActive: {
+    backgroundColor: '#6366F1',
+  },
+  splitToggleText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '700',
+  },
+  splitToggleTextActive: {
+    color: '#FFFFFF',
+  },
+  splitInputGroup: {
+    gap: 0,
+  },
+  ratioSectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#94A3B8',
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  ratioContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  ratioButton: {
+    flex: 1,
+    height: 34,
+    backgroundColor: '#070913',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#1E293B',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ratioButtonActive: {
+    borderColor: '#6366F1',
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+  },
+  ratioText: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '700',
+  },
+  ratioTextActive: {
+    color: '#818CF8',
+  },
+  breakdownText: {
+    fontSize: 11,
+    color: '#10B981',
+    lineHeight: 16,
+    marginBottom: 12,
+    fontWeight: '600',
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    padding: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.15)',
   },
   modalPrimaryBtn: {
     backgroundColor: '#6366F1',
