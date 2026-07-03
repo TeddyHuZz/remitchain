@@ -1,22 +1,95 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState } from "react";
+import Link from "next/link";
+import { 
+  Smartphone, 
+  History as HistoryIcon, 
+  User, 
+  TrendingUp, 
+  Shield, 
+  MapPin, 
+  HelpCircle, 
+  ArrowRight, 
+  Mail, 
+  ChevronDown, 
+  Zap, 
+  DollarSign, 
+  Clock, 
+  Users,
+  Check
+} from "lucide-react";
 import styles from "./page.module.css";
 
 export default function Home() {
-  // Mobile Screen Yield Ticker
-  const [phoneYield, setPhoneYield] = useState(15.000342);
-  const tickerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [activeMockupTab, setActiveMockupTab] = useState("dashboard");
+  const [activeStep, setActiveStep] = useState(1);
+  const [openFaqId, setOpenFaqId] = useState<number | null>(null);
+  const [emailInput, setEmailInput] = useState("");
+  const [isSubscribed, setIsSubscribed] = useState(false);
 
-  useEffect(() => {
-    tickerRef.current = setInterval(() => {
-      setPhoneYield((prev) => prev + 0.000002);
-    }, 1000);
+  const toggleFaq = (id: number) => {
+    setOpenFaqId(openFaqId === id ? null : id);
+  };
 
-    return () => {
-      if (tickerRef.current) clearInterval(tickerRef.current);
-    };
-  }, []);
+  const handleSubscribe = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!emailInput) return;
+    setIsSubscribed(true);
+    setTimeout(() => {
+      setEmailInput("");
+      setIsSubscribed(false);
+    }, 4000);
+  };
+
+  const steps = [
+    {
+      id: 1,
+      title: "1. Send Gasless USDC",
+      desc: "Derive a secure smart account client-side using device credentials. Enter a family member's phone number or smart address and tap send. Paymaster contracts sponsor the transaction gas fees instantly.",
+      stat: "Gas Fee: $0.00 Sponsored",
+      icon: <Zap size={20} className={styles.stepIconColor} />
+    },
+    {
+      id: 2,
+      title: "2. Earn Real-time Yield",
+      desc: "While funds are in transit or held inside the non-custodial smart wallet, stable USDC is automatically routed to audited interest vaults, accumulating 4.5% APY linear interest on-chain second-by-second.",
+      stat: "Yield Rate: 4.5% APY",
+      icon: <TrendingUp size={20} className={styles.stepIconColor} />
+    },
+    {
+      id: 3,
+      title: "3. Cash Out Locally",
+      desc: "The recipient checks the nearby storefront directory map on their phone, visits a local partner retail shop, scans the booth QR code, handshakes physical fiat currency, and releases the digital escrow atomically.",
+      stat: "Merchant Commission: 1.5%",
+      icon: <MapPin size={20} className={styles.stepIconColor} />
+    }
+  ];
+
+  const currentStep = (steps.find((s) => s.id === activeStep) || steps[0]) as typeof steps[0];
+
+  const faqs = [
+    {
+      id: 1,
+      q: "How can transfers be completely gasless?",
+      a: "RemitChain utilizes the ERC-4337 Account Abstraction standard. Instead of users needing native blockchain tokens (like POL or ETH) to validate transactions, transactions are packaged as UserOperations. These operations are routed to a verified Paymaster contract, which sponsors the native gas fees on behalf of the user."
+    },
+    {
+      id: 2,
+      q: "What is a DePIN cash-out booth?",
+      a: "A DePIN (Decentralized Physical Infrastructure Network) cash-out booth is a local neighborhood retail storefront (like a convenience store, pharmacy, or sari-sari shop) registered on the RemitChain network. Storeowners lock a collateral balance of USDC in the smart contract and earn commissions by settling digital withdrawals for local cash."
+    },
+    {
+      id: 3,
+      q: "Are my funds secure?",
+      a: "Yes. RemitChain is entirely non-custodial. Your keys are generated in the hardware Secure Enclave of your mobile device. They are backed up using AES-GCM-256 client-side encryption and synced to your personal Google Drive account. RemitChain servers never have access to your private credentials."
+    },
+    {
+      id: 4,
+      q: "How does the yield vault generate interest?",
+      a: "Deposited stable USDC is locked in verified liquidity reserves. The smart contract calculates accrued yield linearly using block timestamps. When you withdraw or deposit, the interest is dynamically calculated and updated on-chain down to the millionth of a dollar."
+    }
+  ];
 
   return (
     <div className={styles.page}>
@@ -26,15 +99,15 @@ export default function Home() {
       <header className={styles.header}>
         <div className={styles.headerInner}>
           <div className={styles.logo}>
-            <div className={styles.logoDot} />
+            <img src="/logo.png" alt="RemitChain Logo" className={styles.logoImage} />
             RemitChain
           </div>
           <nav className={styles.nav}>
-            <a href="#features" className={styles.navLink}>Core Concepts</a>
-            <a href="#depin" className={styles.navLink}>DePIN Network</a>
-            <a href="#architecture" className={styles.navLink}>Architecture</a>
-            <a href="#technology" className={styles.navLink}>Technology</a>
-            <a href="#architecture" className={styles.headerCta}>View System Specs</a>
+            <a href="#workflow" className={styles.navLink}>How it Works</a>
+            <a href="#features" className={styles.navLink}>Concepts</a>
+            <a href="#faq" className={styles.navLink}>FAQs</a>
+            <Link href="/whitepaper" className={styles.navLink}>Whitepaper</Link>
+            <Link href="/whitepaper" className={styles.headerCta}>Read Whitepaper</Link>
           </nav>
         </div>
       </header>
@@ -46,48 +119,136 @@ export default function Home() {
             <div className={styles.badge}>Web3 Cash-out Gateways</div>
             <h1 className={styles.heroTitle}>
               The DePIN Network for <br />
-              <span className={styles.gradientText}>Global Remittances</span>
+              Global Remittances
             </h1>
             <p className={styles.heroDescription}>
               RemitChain combines gasless mobile smart wallets with local brick-and-mortar stores to build a decentralized physical cash-out network. Bypassing traditional payment systems to deliver money instantly with zero gas friction.
             </p>
-            <div className={styles.heroCtas}>
-              <a href="#architecture" className={styles.btnPrimary}>View Architecture</a>
-              <a href="#features" className={styles.btnSecondary}>Read Tech Specs</a>
+            
+            {/* Store Download Badges */}
+            <div className={styles.storeBadges}>
+              <div className={styles.storeBadge}>
+                <img src="/apple.png" alt="Apple Store" className={styles.badgeImage} />
+                <div>
+                  <div className={styles.badgeTextSmall}>Download on the</div>
+                  <div className={styles.badgeTextLarge}>App Store</div>
+                </div>
+              </div>
+              <div className={styles.storeBadge}>
+                <img src="/android.png" alt="Google Play" className={styles.badgeImage} />
+                <div>
+                  <div className={styles.badgeTextSmall}>Get it on</div>
+                  <div className={styles.badgeTextLarge}>Google Play</div>
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.heroCtas} style={{ marginTop: "24px" }}>
+              <Link href="/whitepaper" className={styles.btnPrimary}>Read Technical Whitepaper</Link>
+              <a href="#workflow" className={styles.btnSecondary}>Watch Demo Flow</a>
+            </div>
+            
+            {/* Tour selectors panel */}
+            <div className={styles.tourPanel}>
+              <span className={styles.tourTitle}>Select App Screen to View</span>
+              <div className={styles.tourButtons}>
+                <button 
+                  onClick={() => setActiveMockupTab("dashboard")}
+                  className={`${styles.tourBtn} ${activeMockupTab === "dashboard" ? styles.tourBtnActive : ""}`}
+                >
+                  <Smartphone size={14} />
+                  <span>Smart Dashboard</span>
+                </button>
+                <button 
+                  onClick={() => setActiveMockupTab("yield")}
+                  className={`${styles.tourBtn} ${activeMockupTab === "yield" ? styles.tourBtnActive : ""}`}
+                >
+                  <TrendingUp size={14} />
+                  <span>Linear Yield Vault</span>
+                </button>
+                <button 
+                  onClick={() => setActiveMockupTab("history")}
+                  className={`${styles.tourBtn} ${activeMockupTab === "history" ? styles.tourBtnActive : ""}`}
+                >
+                  <HistoryIcon size={14} />
+                  <span>Transaction Feed</span>
+                </button>
+                <button 
+                  onClick={() => setActiveMockupTab("profile")}
+                  className={`${styles.tourBtn} ${activeMockupTab === "profile" ? styles.tourBtnActive : ""}`}
+                >
+                  <User size={14} />
+                  <span>Profile & Security</span>
+                </button>
+              </div>
             </div>
           </div>
 
           <div className={styles.deviceContainer}>
-            {/* CSS Smartphone Mockup */}
-            <div className={styles.phone}>
-              <div className={styles.phoneScreen}>
-                <div className={styles.phoneHeader}>
-                  <TextLogo />
-                  <div className={styles.apyBadge} style={{ backgroundColor: 'rgba(16, 185, 129, 0.12)', paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4, borderRadius: 6 }}>
-                    <span style={{ color: '#10B981', fontSize: 10, fontWeight: '700' }}>4.5% APY</span>
-                  </div>
-                </div>
+            {/* Screenshot Display */}
+            <div className={styles.phoneWrapper}>
+              <img 
+                src={`/screenshots/${activeMockupTab}.png`} 
+                alt={`RemitChain App ${activeMockupTab} Screen`} 
+                className={styles.screenshotImage}
+              />
+            </div>
+          </div>
+        </section>
 
-                <div className={styles.phoneCard} style={{ borderColor: 'rgba(16, 185, 129, 0.25)', borderStyle: 'solid', borderWidth: 1 }}>
-                  <div className={styles.phoneCardTitle}>Yield Vault Balance</div>
-                  <div className={styles.phoneBalance}>
-                    ${phoneYield.toFixed(6)}
-                  </div>
-                  <div className={styles.phoneBalanceSub}>USDC Accruing Real-time</div>
-                </div>
+        {/* Live Metrics Dashboard Banner */}
+        <section className={styles.metricsSection}>
+          <div className={styles.metricsGrid}>
+            <div className={styles.metricCard}>
+              <DollarSign className={styles.metricIcon} size={20} />
+              <div className={styles.metricValue}>$142,500+</div>
+              <div className={styles.metricLabel}>USDC Transferred</div>
+            </div>
+            <div className={styles.metricCard}>
+              <Users className={styles.metricIcon} size={20} />
+              <div className={styles.metricValue}>48 Stores</div>
+              <div className={styles.metricLabel}>Active Merchant Booths</div>
+            </div>
+            <div className={styles.metricCard}>
+              <Clock className={styles.metricIcon} size={20} />
+              <div className={styles.metricValue}>1.8s</div>
+              <div className={styles.metricLabel}>Average Settlement Time</div>
+            </div>
+            <div className={styles.metricCard}>
+              <Zap className={styles.metricIcon} size={20} />
+              <div className={styles.metricValue}>$1,840.15</div>
+              <div className={styles.metricLabel}>Gas Fees Sponsored</div>
+            </div>
+          </div>
+        </section>
 
-                <div className={styles.phoneCard}>
-                  <div className={styles.phoneCardTitle}>Remittance Transfer</div>
-                  <div style={{ color: '#94A3B8', fontSize: 11, marginBottom: 12 }}>Send Gasless USDC directly to a family member's phone.</div>
-                  <div style={{ backgroundColor: '#070913', borderRadius: 8, height: 36, display: 'flex', alignItems: 'center', paddingLeft: 10, paddingRight: 10, color: '#64748B', fontSize: 11, borderWidth: 1, borderColor: '#1E293B' }}>
-                    Recipient Smart Address
-                  </div>
-                </div>
+        {/* Step-by-step How it Works Section */}
+        <section id="workflow" className={styles.infoSection}>
+          <div className={styles.sectionHeader}>
+            <h2 className={styles.sectionTitle}>How RemitChain Works</h2>
+            <p className={styles.sectionSubtitle}>A look at how we combine account abstraction with neighborhood retail gateways.</p>
+          </div>
 
-                <div className={styles.phoneButton}>
-                  <span className={styles.phoneButtonText}>Send Gasless USDC</span>
-                </div>
+          <div className={styles.workflowContainer}>
+            <div className={styles.stepSelectors}>
+              {steps.map((step) => (
+                <button
+                  key={step.id}
+                  onClick={() => setActiveStep(step.id)}
+                  className={`${styles.stepSelectorBtn} ${activeStep === step.id ? styles.stepSelectorBtnActive : ""}`}
+                >
+                  {step.title}
+                </button>
+              ))}
+            </div>
+
+            <div className={styles.stepDisplayCard}>
+              <div className={styles.stepDisplayHeader}>
+                {currentStep.icon}
+                <h4 className={styles.stepDisplayTitle}>{currentStep.title}</h4>
+                <span className={styles.stepDisplayStat}>{currentStep.stat}</span>
               </div>
+              <p className={styles.stepDisplayDesc}>{currentStep.desc}</p>
             </div>
           </div>
         </section>
@@ -95,7 +256,7 @@ export default function Home() {
         {/* Core Concepts */}
         <section id="features" className={styles.infoSection}>
           <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>Core Concepts</h2>
+            <h2 className={styles.sectionTitle}>Protocol Concepts</h2>
             <p className={styles.sectionSubtitle}>A look at how RemitChain is structured to serve remitters and recipients globally.</p>
           </div>
 
@@ -121,104 +282,59 @@ export default function Home() {
           </div>
         </section>
 
-        {/* DePIN Protocol */}
-        <section id="depin" className={styles.infoSection}>
+        {/* FAQ Accordion Section */}
+        <section id="faq" className={styles.infoSection}>
           <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>Decentralized Physical Infrastructure</h2>
-            <p className={styles.sectionSubtitle}>How physical storefronts integrate into a trustless digital ledger to replace traditional banking offices.</p>
+            <h2 className={styles.sectionTitle}>Frequently Asked Questions</h2>
+            <p className={styles.sectionSubtitle}>Find answers to the most common questions about the RemitChain protocol.</p>
           </div>
 
-          <div className={styles.grid3}>
-            <div className={styles.card}>
-              <h3 className={styles.cardTitle}>Store Incentives</h3>
-              <p className={styles.cardDescription}>
-                Booths earn a 1.5% commission on cash-out volume they settle. This creates an organic market of liquid cash gateways without centralized operations.
-              </p>
-            </div>
-            <div className={styles.card}>
-              <h3 className={styles.cardTitle}>Physical Foot Traffic</h3>
-              <p className={styles.cardDescription}>
-                RemitChain routes users to physical locations indicated on a store directory map, driving retail customer traffic and general trade to partners.
-              </p>
-            </div>
-            <div className={styles.card}>
-              <h3 className={styles.cardTitle}>Contract Guarantee</h3>
-              <p className={styles.cardDescription}>
-                Liquidity is locked in smart escrow accounts. When physical cash is handed over, the equivalent digital currency swaps to the store wallet instantly.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* Technical Architecture */}
-        <section id="architecture" className={styles.infoSection}>
-          <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>System Architecture</h2>
-            <p className={styles.sectionSubtitle}>The technical blueprint behind gasless transactions, wallet derivation, and on-chain interest accumulation.</p>
-          </div>
-
-          <div className={styles.grid3}>
-            <div className={styles.card}>
-              <h3 className={styles.cardTitle}>Account Abstraction</h3>
-              <p className={styles.cardDescription}>
-                RemitChain leverages ERC-4337 to separate keys from ownership. The user owns a smart account contract initialized via a device key pair (EOA). This enables multi-call transaction batching, account recovery, and alternative signing options.
-              </p>
-            </div>
-            <div className={styles.card}>
-              <h3 className={styles.cardTitle}>Paymaster Gas Sponsorship</h3>
-              <p className={styles.cardDescription}>
-                Instead of users paying gas fees in native network tokens (POL), transaction requests are packaged as UserOperations. These are routed through a bundler to a pre-funded Paymaster contract, which sponsors the gas fee on behalf of the user.
-              </p>
-            </div>
-            <div className={styles.card}>
-              <h3 className={styles.cardTitle}>Yield Vault Contract</h3>
-              <p className={styles.cardDescription}>
-                USDC is deposited into an on-chain vault. The vault contract computes interest linearly using block timestamps. Accumulated yield is settled dynamically during user interactions (deposits and withdrawals) and distributed from liquidity reserves.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* White Paper Details */}
-        <section id="technology" className={styles.infoSection}>
-          <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>Technology & Specifications</h2>
-            <p className={styles.sectionSubtitle}>Details on the protocol layers, smart contract standards, and client services powering the ecosystem.</p>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-            <div className={styles.card} style={{ width: "100%" }}>
-              <h3 className={styles.cardTitle} style={{ borderBottom: "1px solid var(--card-border)", paddingBottom: "16px", marginBottom: "16px" }}>
-                ERC-4337 UserOperation Lifecycle
-              </h3>
-              <p className={styles.cardDescription} style={{ marginBottom: "16px", lineHeight: "1.7" }}>
-                Every action (such as sending money or depositing into the yield vault) starts as a UserOperation. This object contains metadata specifying the sender, nonce, validation gas, payment parameters, and call target data.
-              </p>
-              <p className={styles.cardDescription} style={{ marginBottom: "16px", lineHeight: "1.7" }}>
-                The UserOperation is signed using the validator contract (Kernel ECDSA plugin) and dispatched to an alternate mempool monitored by a bundler. The bundler compiles multiple operations into a single standard Ethereum transaction, which is submitted to the EntryPoint contract for execution.
-              </p>
-              <p className={styles.cardDescription} style={{ lineHeight: "1.7" }}>
-                During verification, the EntryPoint queries the Paymaster contract to confirm gas fee sponsorship before running the contract calls on the target smart account.
-              </p>
-            </div>
-
-            <div className={styles.card} style={{ width: "100%" }}>
-              <h3 className={styles.cardTitle} style={{ borderBottom: "1px solid var(--card-border)", paddingBottom: "16px", marginBottom: "16px" }}>
-                Smart Contract Implementation (Amoy Testnet)
-              </h3>
-              <p className={styles.cardDescription} style={{ marginBottom: "16px", lineHeight: "1.7" }}>
-                The core ledger transactions run on Polygon Amoy, utilizing Circle's official USDC contract address for stable transfer operations. 
-              </p>
-              <p className={styles.cardDescription} style={{ marginBottom: "16px", lineHeight: "1.7" }}>
-                The yield savings feature is powered by the YieldVault contract deployed on-chain. It maintains a secure reserve of USDC tokens. Yield accrues based on the formula:
-              </p>
-              <div style={{ backgroundColor: "#070913", border: "1px solid var(--card-border)", borderRadius: "8px", padding: "16px", margin: "16px 0", fontFamily: "var(--font-mono)", fontSize: "13px", color: "#A5B4FC", textAlign: "center" }}>
-                Pending Interest = (Principal × APY Basis Points × Elapsed Time) ÷ (10000 × 31,536,000 Seconds)
+          <div className={styles.faqList}>
+            {faqs.map((faq) => (
+              <div key={faq.id} className={styles.faqItem}>
+                <button className={styles.faqQuestion} onClick={() => toggleFaq(faq.id)}>
+                  <span>{faq.q}</span>
+                  <ChevronDown 
+                    size={16} 
+                    className={`${styles.faqChevron} ${openFaqId === faq.id ? styles.faqChevronOpen : ""}`} 
+                  />
+                </button>
+                <div className={`${styles.faqAnswer} ${openFaqId === faq.id ? styles.faqAnswerOpen : ""}`}>
+                  <p>{faq.a}</p>
+                </div>
               </div>
-              <p className={styles.cardDescription} style={{ lineHeight: "1.7" }}>
-                On production deployment, the mobile client maps directly to the Aave V3 Pool contracts, converting deposited USDC into standard yield-bearing aUSDC tokens.
-              </p>
-            </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Newsletter Signup & Community Panel */}
+        <section className={styles.newsletterSection}>
+          <div className={styles.newsletterCard}>
+            <h3 className={styles.newsletterTitle}>Stay Connected to the Protocol</h3>
+            <p className={styles.newsletterDesc}>
+              Subscribe to get updates on mainnet deployments, new retail cash-out booth locations, and technical research updates.
+            </p>
+            {isSubscribed ? (
+              <div className={styles.newsletterSuccess}>
+                <Check size={18} />
+                <span>Thank you for subscribing! We'll keep you in the loop.</span>
+              </div>
+            ) : (
+              <form onSubmit={handleSubscribe} className={styles.newsletterForm}>
+                <input 
+                  type="email" 
+                  className={styles.newsletterInput} 
+                  placeholder="Enter your developer email address"
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  required
+                />
+                <button type="submit" className={styles.newsletterBtn}>
+                  <Mail size={16} />
+                  <span>Subscribe</span>
+                </button>
+              </form>
+            )}
           </div>
         </section>
       </main>
@@ -229,25 +345,12 @@ export default function Home() {
           <p className={styles.footerText}>&copy; 2026 RemitChain Foundation. All rights reserved.</p>
           <div className={styles.footerLinks}>
             <a href="#features" className={styles.footerLink}>Features</a>
-            <a href="#depin" className={styles.footerLink}>DePIN Network</a>
-            <a href="#architecture" className={styles.footerLink}>Architecture</a>
-            <a href="#technology" className={styles.footerLink}>Technology</a>
+            <a href="#workflow" className={styles.footerLink}>Workflow</a>
+            <a href="#faq" className={styles.footerLink}>FAQs</a>
+            <Link href="/whitepaper" className={styles.footerLink}>Whitepaper</Link>
           </div>
         </div>
       </footer>
     </div>
   );
-}
-
-function TextLogo() {
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#6366F1', marginRight: 4 }} />
-      <span style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 13 }}>RemitChain</span>
-    </View>
-  );
-}
-
-function View({ children, style }: { children?: React.ReactNode; style?: React.CSSProperties }) {
-  return <div style={{ display: 'flex', ...style }}>{children}</div>;
 }

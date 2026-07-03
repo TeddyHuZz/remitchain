@@ -576,7 +576,7 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
                   {recentTx.saved && (
                     <View style={styles.modalDetailRow}>
                       <Text style={styles.modalDetailLabel}>Gas Fee</Text>
-                      <Text style={styles.modalDetailSavings}>⚡ Sponsored ({recentTx.saved})</Text>
+                      <Text style={styles.modalDetailSavings}>Sponsored ({recentTx.saved})</Text>
                     </View>
                   )}
                 </View>
@@ -597,7 +597,7 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
                   {recentTx.saved && (
                     <View style={styles.modalDetailRow}>
                       <Text style={styles.modalDetailLabel}>Gas Fee</Text>
-                      <Text style={styles.modalDetailSavings}>⚡ Sponsored ({recentTx.saved})</Text>
+                      <Text style={styles.modalDetailSavings}>Sponsored ({recentTx.saved})</Text>
                     </View>
                   )}
                 </View>
