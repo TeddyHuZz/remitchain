@@ -1,4 +1,5 @@
 const { getDefaultConfig } = require('expo/metro-config');
+const { withWeb3Auth } = require('@web3auth/react-native-sdk/metro-config');
 const path = require('path');
 
 // Find the project and monorepo roots
@@ -25,4 +26,4 @@ config.resolver.extraNodeModules = {
   path: path.resolve(projectRoot, 'node_modules/path-browserify'),
 };
 
-module.exports = config;
+module.exports = withWeb3Auth(config);

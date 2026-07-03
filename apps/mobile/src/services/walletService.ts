@@ -5,10 +5,14 @@ import { polygonAmoy } from 'viem/chains';
 import { generatePrivateKey } from 'viem/accounts';
 import { WEB3_CONFIG } from '../config/env';
 import * as LocalAuthentication from 'expo-local-authentication';
-import { backupService } from './backupService';
 import { signerToEcdsaValidator } from '@zerodev/ecdsa-validator';
 import { createKernelAccount, createKernelAccountClient, createZeroDevPaymasterClient } from '@zerodev/sdk';
 import { KERNEL_V3_1, getEntryPoint } from '@zerodev/sdk/constants';
+import * as WebBrowser from 'expo-web-browser';
+
+// Web3Auth is imported lazily to avoid side-effect crashes at module load time
+let _Web3Auth: any = null;
+let _AUTH_CONNECTION: any = null;
 
 // SecureStore key definitions
 const EOA_PRIVATE_KEY_KEY = 'remitchain_eoa_private_key';
@@ -23,11 +27,32 @@ export interface WalletState {
   isCloudSynced?: boolean;
 }
 
-/**
- * Service to manage Account Abstraction wallet derivation and operations.
- */
 class WalletService {
   private activeWallet: WalletState | null = null;
+  private web3auth: any = null;
+
+  private async getWeb3Auth(): Promise<any> {
+    if (this.web3auth) return this.web3auth;
+
+    // Lazy import to avoid side-effect crashes during module initialization
+    if (!_Web3Auth) {
+      console.log('[Web3Auth] Loading SDK module...');
+      const sdk = await import('@web3auth/react-native-sdk');
+      _Web3Auth = sdk.default;
+      _AUTH_CONNECTION = sdk.AUTH_CONNECTION;
+      console.log('[Web3Auth] SDK module loaded successfully');
+    }
+
+    const web3auth = new _Web3Auth(WebBrowser, SecureStore, {
+      clientId: WEB3_CONFIG.WEB3AUTH_CLIENT_ID,
+      network: WEB3_CONFIG.WEB3AUTH_NETWORK as any,
+      redirectUrl: WEB3_CONFIG.WEB3AUTH_REDIRECT_URL,
+    });
+
+    await web3auth.init();
+    this.web3auth = web3auth;
+    return web3auth;
+  }
 
   /**
    * Helper: Get SecureStore authentication options dynamically based on biometrics availability.
@@ -115,41 +140,33 @@ class WalletService {
       onProgress?.("Generating secure device keys...");
       privateKey = await this.getOrCreatePrivateKey();
     } else {
-      // Google Login via Secure Google Drive Backup & Restore
-      onProgress?.("Signing into Google account...");
+      // Google Login via Web3Auth MPC
+      onProgress?.("Initializing Web3Auth Client...");
       try {
-        // 1. Authenticate with Google
-        const googleSession = await backupService.authenticateGoogle(username);
-        
-        onProgress?.("Checking for cloud backups on Google Drive...");
-        
-        // 2. Download from Google Drive (returns encrypted key if it exists)
-        const encryptedBackup = await backupService.downloadBackup(googleSession);
-        
-        if (encryptedBackup) {
-          onProgress?.("Restoring wallet from Google cloud...");
-          // Decrypt the key using their username/passcode
-          const decryptedKey = backupService.decrypt(encryptedBackup, username);
-          privateKey = decryptedKey as Hex;
-        } else {
-          onProgress?.("No backup found. Creating local wallet...");
-          await new Promise((r) => setTimeout(r, 800));
-          // Generate key locally
-          privateKey = generatePrivateKey();
-          
-          onProgress?.("Backing up wallet to Google Drive...");
-          // Encrypt client-side
-          const encryptedKey = backupService.encrypt(privateKey, username);
-          // Upload to Drive
-          await backupService.uploadBackup(googleSession, encryptedKey);
+        const web3auth = await this.getWeb3Auth();
+
+        onProgress?.("Signing into Google account...");
+        const result = await web3auth.connectTo({
+          authConnection: _AUTH_CONNECTION.GOOGLE,
+          extraLoginOptions: {
+            connection: WEB3_CONFIG.WEB3AUTH_CONNECTION_ID,
+          },
+        });
+
+        if (!result || !result.signer || !('privateKey' in result.signer)) {
+          throw new Error("Failed to retrieve private key from Web3Auth.");
         }
+
+        privateKey = result.signer.privateKey as Hex;
 
         // Save the private key to SecureStore (locked behind biometrics/FaceID if enrolled)
         const storeAuthOptions = await this.getAuthOptions('Secure your restored wallet with biometrics');
         await SecureStore.setItemAsync(EOA_PRIVATE_KEY_KEY, privateKey, storeAuthOptions);
       } catch (err: any) {
-        console.error("Google sync flow failed, falling back to secure local key:", err);
-        onProgress?.("Google Sync failed, using secure local key...");
+        console.error("Google login failed, falling back to secure local key:", err);
+        if (err?.stack) console.error("Google login error stack:", err.stack);
+        if (err?.cause?.stack) console.error("Google login error cause stack:", err.cause.stack);
+        onProgress?.("Google Login failed, using secure local key...");
         await new Promise((r) => setTimeout(r, 1200));
         privateKey = await this.getOrCreatePrivateKey();
       }
@@ -229,6 +246,8 @@ class WalletService {
       return this.activeWallet;
     } catch (error: any) {
       console.error("Live ZeroDev AA derivation failed, falling back to simulated mode:", error);
+      if (error?.stack) console.error("ZeroDev error stack:", error.stack);
+      if (error?.cause?.stack) console.error("ZeroDev error cause stack:", error.cause.stack);
       
       // Graceful fallback to simulated mode if bundler/paymaster URL fails
       onProgress?.("Fallback: Generating simulated Smart Account address...");
@@ -911,7 +930,7 @@ class WalletService {
       ]);
 
       return {
-        total: (Number(totalRaw) / 1_000_000).toFixed(2),
+        total: (Number(totalRaw) / 1_000_000).toFixed(6),
         principal: (Number(principalRaw) / 1_000_000).toFixed(2),
         interest: (Number(interestRaw) / 1_000_000).toFixed(6),
         apyBps: Number(apyBpsRaw),

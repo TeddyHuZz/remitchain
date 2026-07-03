@@ -12,19 +12,46 @@ try {
   });
 } catch (e) {}
 
-// Set up window.location and location mocks for Web3Auth
+// Set up window.location and location mocks for Web3Auth and Expo bundle loader
 if (typeof (global as any).window === 'undefined') {
   (global as any).window = {};
 }
-if (typeof (global as any).window.location === 'undefined') {
-  (global as any).window.location = {
-    origin: 'http://localhost',
-    href: 'http://localhost',
-  };
+
+const locationMock = {
+  origin: 'http://localhost',
+  href: 'http://localhost',
+};
+
+try {
+  Object.defineProperty(global, 'location', {
+    value: locationMock,
+    writable: true,
+    configurable: true,
+  });
+} catch (e) {
+  try {
+    (global as any).location = locationMock;
+  } catch (err) {}
 }
-if (typeof (global as any).location === 'undefined') {
-  (global as any).location = (global as any).window.location;
-}
+
+try {
+  if (!(global as any).location) {
+    (global as any).location = locationMock;
+  } else {
+    (global as any).location.origin = 'http://localhost';
+    (global as any).location.href = 'http://localhost';
+  }
+} catch (e) {}
+
+try {
+  if (typeof (global as any).window !== 'undefined') {
+    Object.defineProperty((global as any).window, 'location', {
+      value: locationMock,
+      writable: true,
+      configurable: true,
+    });
+  }
+} catch (e) {}
 
 // Set up global Buffer
 if (typeof (global as any).Buffer === 'undefined') {
@@ -57,15 +84,19 @@ if (typeof (global as any).__dirname === 'undefined') {
 
 // Polyfill pathToFileURL on the 'url' package
 const urlModule = require('url');
-if (typeof urlModule.pathToFileURL === 'undefined') {
-  urlModule.pathToFileURL = (filepath: string) => {
-    const resolved = filepath.replace(/\\/g, '/');
-    const absolute = resolved.startsWith('/') ? resolved : '/' + resolved;
+
+urlModule.pathToFileURL = (filepath: string) => {
+  if (typeof filepath !== 'string') {
     return {
-      href: 'file://' + absolute,
+      href: '',
     };
+  }
+  const resolved = filepath.replace(/\\/g, '/');
+  const absolute = resolved.startsWith('/') ? resolved : '/' + resolved;
+  return {
+    href: 'file://' + absolute,
   };
-}
+};
 
 // Bypass React Native DevTools Network Inspector for Web3 requests (prevents "Could not load bundle" error on design-reverted HTTP 500 calls)
 if (typeof (global as any).originalXMLHttpRequest !== 'undefined') {
@@ -73,4 +104,53 @@ if (typeof (global as any).originalXMLHttpRequest !== 'undefined') {
 }
 if (typeof (global as any).originalFetch !== 'undefined') {
   global.fetch = (global as any).originalFetch;
+}
+
+// Polyfill Linking.removeEventListener for React Native 0.65+ / 0.80+ compatibility with Web3Auth
+import { Linking, NativeModules, TurboModuleRegistry } from 'react-native';
+try {
+  if (typeof (Linking as any).removeEventListener === 'undefined') {
+    Object.defineProperty(Linking, 'removeEventListener', {
+      value: (type: string, handler: any) => {
+        // Silent bypass
+      },
+      writable: true,
+      configurable: true,
+    });
+  }
+} catch (e) {
+  console.warn("Failed to polyfill Linking.removeEventListener:", e);
+}
+
+// Polyfill NativeSourceCode and TurboModuleRegistry to prevent Expo's async-require from crashing when getDevServer().url returns undefined in Bridgeless mode.
+try {
+  const SourceCode = NativeModules.SourceCode || {};
+  if (!SourceCode.scriptURL) {
+    SourceCode.scriptURL = 'http://10.0.2.2:8081/index.bundle?platform=android&dev=true';
+  }
+  Object.defineProperty(NativeModules, 'SourceCode', {
+    value: SourceCode,
+    writable: true,
+    configurable: true,
+  });
+} catch (e) {
+  // Silent fallback
+}
+
+try {
+  if (TurboModuleRegistry && typeof TurboModuleRegistry.get === 'function') {
+    const originalGet = TurboModuleRegistry.get;
+    (TurboModuleRegistry as any).get = (name: string): any => {
+      if (name === 'SourceCode') {
+        return {
+          getConstants: () => ({
+            scriptURL: 'http://10.0.2.2:8081/index.bundle?platform=android&dev=true',
+          }),
+        };
+      }
+      return originalGet(name);
+    };
+  }
+} catch (e) {
+  console.warn('[Polyfill] Failed to patch TurboModuleRegistry:', e);
 }

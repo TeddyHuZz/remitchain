@@ -1,6 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View, ActivityIndicator } from 'react-native';
+
+
+// Hook unhandled promise rejections to print their stack traces
+if (typeof Promise !== 'undefined') {
+  const p = Promise as any;
+  const wrapHandler = (original: any, name: string) => {
+    return (id: number, error: any) => {
+      console.warn(`🔥 [UNHANDLED REJECTION - ${name}]:`, error);
+      if (error && error.stack) {
+        console.warn(error.stack);
+      }
+      if (original) original(id, error);
+    };
+  };
+  if (p._onUnhandled) {
+    p._onUnhandled = wrapHandler(p._onUnhandled, 'Promise._onUnhandled');
+  }
+  if (p._onUnhandledRejection) {
+    p._onUnhandledRejection = wrapHandler(p._onUnhandledRejection, 'Promise._onUnhandledRejection');
+  }
+}
+
 import AuthScreen from './src/screens/AuthScreen';
 import WalletSetupScreen from './src/screens/WalletSetupScreen';
 import DashboardScreen from './src/screens/DashboardScreen';

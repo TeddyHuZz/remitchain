@@ -39,13 +39,23 @@ export default function WalletSetupScreen({
     };
   }, [username, loginMethod]);
 
+  const isGoogleAuthPhase =
+    loginMethod === 'google' &&
+    (status.includes('Web3Auth') || status.includes('Google') || status.includes('Initializing setup'));
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <ActivityIndicator size="large" color="#3B82F6" style={styles.spinner} />
         
-        <Text style={styles.title}>Securing Account</Text>
-        <Text style={styles.subtitle}>Creating your smart wallet on Polygon...</Text>
+        <Text style={styles.title}>
+          {isGoogleAuthPhase ? 'Google Sign-In' : 'Securing Account'}
+        </Text>
+        <Text style={styles.subtitle}>
+          {isGoogleAuthPhase 
+            ? 'Launching secure login browser window...' 
+            : 'Creating your smart wallet on Polygon...'}
+        </Text>
 
         <View style={styles.statusBox}>
           <Text style={styles.statusText}>{status}</Text>
@@ -53,8 +63,9 @@ export default function WalletSetupScreen({
 
         <View style={styles.infoBox}>
           <Text style={styles.infoText}>
-            This uses Account Abstraction to generate a smart contract-based wallet. 
-            You won't have to write down or manage a seed phrase.
+            {isGoogleAuthPhase
+              ? 'Your private key will be generated securely inside a Web3Auth MPC node and linked to your social login.'
+              : 'This uses Account Abstraction to generate a smart contract-based wallet. You won\'t have to write down or manage a seed phrase.'}
           </Text>
         </View>
       </View>
