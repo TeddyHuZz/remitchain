@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,7 +8,10 @@ import {
   TextInput,
   Clipboard,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
+import { createPublicClient, http, formatUnits } from 'viem';
+import { WEB3_CONFIG } from '../config/env';
 
 export interface BoothInfo {
   id: string;
@@ -21,8 +24,6 @@ export interface BoothInfo {
   phone: string;
 }
 
-const APPROVED_DEPIN_BOOTHS: BoothInfo[] = [];
-
 interface BoothsTabProps {
   onSelectBooth: (boothAddress: string) => void;
 }
@@ -30,8 +31,107 @@ interface BoothsTabProps {
 export default function BoothsTab({ onSelectBooth }: BoothsTabProps) {
   const [search, setSearch] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [booths, setBooths] = useState<BoothInfo[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const filteredBooths = APPROVED_DEPIN_BOOTHS.filter(
+  const loadBooths = async () => {
+    setLoading(true);
+    try {
+      const publicClient = createPublicClient({
+        transport: http(WEB3_CONFIG.PUBLIC_RPC_URL)
+      });
+      const BOOTH_REGISTRY_ABI = [
+        {
+          name: "getBoothAddresses",
+          type: "function",
+          stateMutability: "view",
+          inputs: [],
+          outputs: [{ name: "", type: "address[]" }]
+        },
+        {
+          name: "booths",
+          type: "function",
+          stateMutability: "view",
+          inputs: [{ name: "", type: "address" }],
+          outputs: [
+            { name: "ipfsHash", type: "string" },
+            { name: "collateral", type: "uint256" },
+            { name: "status", type: "uint8" },
+            { name: "submittedAt", type: "uint256" }
+          ]
+        }
+      ] as const;
+
+      const addresses = await publicClient.readContract({
+        address: WEB3_CONFIG.BOOTH_REGISTRY_ADDRESS as `0x${string}`,
+        abi: BOOTH_REGISTRY_ABI,
+        functionName: "getBoothAddresses"
+      });
+
+      const list: BoothInfo[] = [];
+      for (const addr of addresses) {
+        const [ipfsHash, collateralRaw, statusNum] = await publicClient.readContract({
+          address: WEB3_CONFIG.BOOTH_REGISTRY_ADDRESS as `0x${string}`,
+          abi: BOOTH_REGISTRY_ABI,
+          functionName: "booths",
+          args: [addr]
+        });
+
+        // statusNum: 1 = Approved
+        if (statusNum === 1) {
+          let name = `Booth ${addr.slice(0, 6)}...${addr.slice(-4)}`;
+          let location = "Loading details...";
+          let hours = "9 AM - 6 PM";
+
+          if (ipfsHash) {
+            try {
+              const res = await fetch(`https://ipfs.io/ipfs/${ipfsHash}`, { signal: AbortSignal.timeout(3000) });
+              if (res.ok) {
+                const meta = await res.json();
+                name = meta.storeName || name;
+                location = meta.address || location;
+                hours = meta.description || hours;
+              }
+            } catch (e) {
+              try {
+                const res = await fetch(`https://gateway.pinata.cloud/ipfs/${ipfsHash}`, { signal: AbortSignal.timeout(3000) });
+                if (res.ok) {
+                  const meta = await res.json();
+                  name = meta.storeName || name;
+                  location = meta.address || location;
+                  hours = meta.description || hours;
+                }
+              } catch (e2) {
+                console.warn("Failed to fetch IPFS in React Native", ipfsHash);
+              }
+            }
+          }
+
+          list.push({
+            id: addr,
+            name,
+            location,
+            address: addr,
+            liquidity: Number(formatUnits(collateralRaw, 6)).toString(),
+            status: 'open',
+            hours,
+            phone: ''
+          });
+        }
+      }
+      setBooths(list);
+    } catch (e) {
+      console.error("Failed to load booths from contract in mobile app", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadBooths();
+  }, []);
+
+  const filteredBooths = booths.filter(
     (b) =>
       b.name.toLowerCase().includes(search.toLowerCase()) ||
       b.location.toLowerCase().includes(search.toLowerCase())
@@ -114,7 +214,11 @@ export default function BoothsTab({ onSelectBooth }: BoothsTabProps) {
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No booths found</Text>
+            {loading ? (
+              <ActivityIndicator size="small" color="#6366F1" />
+            ) : (
+              <Text style={styles.emptyText}>No active booths found</Text>
+            )}
           </View>
         }
       />

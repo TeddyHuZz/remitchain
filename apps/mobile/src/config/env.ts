@@ -25,6 +25,10 @@ export const WEB3_CONFIG = {
   // Public Polygon Amoy RPC for read-only actions (using official node to prevent 500 DevTools interception)
   PUBLIC_RPC_URL: "https://rpc-amoy.polygon.technology/",
   
+  // Deployed smart contract address configs
+  BOOTH_REGISTRY_ADDRESS: "0x7bCB577350e600c1372036094f7F7464e54E90b6",
+  USDC_ADDRESS: "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582",
+
   // Mock fallback flag: true if we use local/simulated wallet derivation when ZeroDev Project ID is default/missing
   USE_SIMULATION: true,
 };

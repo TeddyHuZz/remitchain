@@ -20,6 +20,7 @@ import {
   Check
 } from "lucide-react";
 import styles from "./page.module.css";
+import Globe from "./components/Globe";
 
 export default function Home() {
   const [activeMockupTab, setActiveMockupTab] = useState("dashboard");
@@ -105,9 +106,10 @@ export default function Home() {
           <nav className={styles.nav}>
             <a href="#workflow" className={styles.navLink}>How it Works</a>
             <a href="#features" className={styles.navLink}>Concepts</a>
+            <a href="#network" className={styles.navLink}>Globe Map</a>
             <a href="#faq" className={styles.navLink}>FAQs</a>
             <Link href="/whitepaper" className={styles.navLink}>Whitepaper</Link>
-            <Link href="/whitepaper" className={styles.headerCta}>Read Whitepaper</Link>
+            <Link href="/booth-application" className={styles.headerCta}>Apply as Booth</Link>
           </nav>
         </div>
       </header>
@@ -279,6 +281,19 @@ export default function Home() {
                 Deposited funds earn interest on-chain at 4.5% APY. The vault yields accumulate in real-time based on smart contract block timestamps.
               </p>
             </div>
+          </div>
+        </section>
+
+        {/* Global DePIN Cashout Network Globe */}
+        <section id="network" className={styles.infoSection}>
+          <div className={styles.sectionHeader}>
+            <h2 className={styles.sectionTitle}>Global DePIN Cash-out Network</h2>
+            <p className={styles.sectionSubtitle}>
+              Explore our live cash-out storefront nodes geolocated on the 3D map. Approved shops lock collateral to process secure withdrawals.
+            </p>
+          </div>
+          <div style={{ display: "flex", justifyContent: "center", width: "100%", marginTop: "16px" }}>
+            <Globe />
           </div>
         </section>
 
