@@ -87,6 +87,7 @@ export default function AdminDashboard() {
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [txPending, setTxPending] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [filterStatus, setFilterStatus] = useState<"ALL" | "PENDING" | "APPROVED" | "REJECTED">("ALL");
 
   const registryAddress = process.env.NEXT_PUBLIC_BOOTH_REGISTRY_ADDRESS;
   const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || "https://rpc-amoy.polygon.technology/";
@@ -357,6 +358,12 @@ export default function AdminDashboard() {
   const totalCount = applicants.length;
   const pendingCount = applicants.filter(a => a.status === "PENDING").length;
   const approvedCount = applicants.filter(a => a.status === "APPROVED").length;
+  const rejectedCount = applicants.filter(a => a.status === "REJECTED").length;
+
+  const filteredApplicants = applicants.filter(app => {
+    if (filterStatus === "ALL") return true;
+    return app.status === filterStatus;
+  });
 
   return (
     <div className={styles.container}>
@@ -503,6 +510,34 @@ export default function AdminDashboard() {
               </div>
             </div>
 
+            {/* Filter Tabs */}
+            <div className={styles.filterTabs}>
+              <button 
+                className={`${styles.tabBtn} ${filterStatus === "ALL" ? styles.tabBtnActive : ""}`}
+                onClick={() => setFilterStatus("ALL")}
+              >
+                All Submissions ({totalCount})
+              </button>
+              <button 
+                className={`${styles.tabBtn} ${filterStatus === "PENDING" ? styles.tabBtnActive : ""}`}
+                onClick={() => setFilterStatus("PENDING")}
+              >
+                🟡 Pending Vetting ({pendingCount})
+              </button>
+              <button 
+                className={`${styles.tabBtn} ${filterStatus === "APPROVED" ? styles.tabBtnActive : ""}`}
+                onClick={() => setFilterStatus("APPROVED")}
+              >
+                🟢 Active Nodes ({approvedCount})
+              </button>
+              <button 
+                className={`${styles.tabBtn} ${filterStatus === "REJECTED" ? styles.tabBtnActive : ""}`}
+                onClick={() => setFilterStatus("REJECTED")}
+              >
+                🔴 Rejected & Refunded ({rejectedCount})
+              </button>
+            </div>
+
             <div className={styles.applicantsList}>
               {isLoadingList ? (
                 <div className={styles.emptyCard}>
@@ -514,8 +549,13 @@ export default function AdminDashboard() {
                   <ShieldAlert size={24} className={styles.emptyIcon} />
                   <span>No applications found in the deployed smart contract.</span>
                 </div>
+              ) : filteredApplicants.length === 0 ? (
+                <div className={styles.emptyCard}>
+                  <ShieldAlert size={24} className={styles.emptyIcon} />
+                  <span>No {filterStatus.toLowerCase()} applications found.</span>
+                </div>
               ) : (
-                applicants.map((app) => (
+                filteredApplicants.map((app) => (
                   <div key={app.address} className={styles.applicantCard}>
                     <div className={styles.cardHeaderRow}>
                       <div>
