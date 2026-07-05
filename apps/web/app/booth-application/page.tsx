@@ -12,7 +12,8 @@ import {
   User,
   Wallet,
   Loader2,
-  AlertTriangle
+  AlertTriangle,
+  X
 } from "lucide-react";
 import { createWalletClient, createPublicClient, custom, http, parseUnits, parseGwei, formatUnits } from "viem";
 import { polygonAmoy } from "viem/chains";
@@ -87,6 +88,10 @@ export default function BoothApplication() {
     submittedAt: number;
   } | null>(null);
   const [checkingExisting, setCheckingExisting] = useState(false);
+  const [stats, setStats] = useState({ payouts: 0, volume: 0, commissions: 0 });
+  const [verificationCode, setVerificationCode] = useState("");
+  const [showVerifyModal, setShowVerifyModal] = useState(false);
+  const [payoutAmountInput, setPayoutAmountInput] = useState("50");
 
   const registryAddress = process.env.NEXT_PUBLIC_BOOTH_REGISTRY_ADDRESS;
   const usdcAddress = process.env.NEXT_PUBLIC_USDC_ADDRESS || "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582";
@@ -108,6 +113,22 @@ export default function BoothApplication() {
     };
     checkConnection();
   }, []);
+
+  useEffect(() => {
+    if (walletAddress && existingBooth?.status === "APPROVED") {
+      const key = `remitchain_merchant_stats_${walletAddress.toLowerCase()}`;
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        try {
+          setStats(JSON.parse(stored));
+        } catch {
+          // fallback
+        }
+      } else {
+        setStats({ payouts: 0, volume: 0, commissions: 0 });
+      }
+    }
+  }, [walletAddress, existingBooth?.status]);
 
   const checkExistingBooth = useCallback(async () => {
     if (!walletAddress || !registryAddress) {
@@ -343,6 +364,38 @@ export default function BoothApplication() {
     }
   };
 
+  const handleVerifyTransfer = () => {
+    if (!verificationCode.trim()) {
+      alert("Please enter a customer pickup code.");
+      return;
+    }
+    setShowVerifyModal(true);
+  };
+
+  const confirmVerifyTransfer = () => {
+    const amount = parseFloat(payoutAmountInput);
+    if (isNaN(amount) || amount <= 0) {
+      alert("Please enter a valid payout amount.");
+      return;
+    }
+
+    const newStats = {
+      payouts: stats.payouts + 1,
+      volume: stats.volume + amount,
+      commissions: stats.commissions + (amount * 0.01) // 1% commission
+    };
+
+    setStats(newStats);
+    if (walletAddress) {
+      const key = `remitchain_merchant_stats_${walletAddress.toLowerCase()}`;
+      localStorage.setItem(key, JSON.stringify(newStats));
+    }
+
+    setShowVerifyModal(false);
+    setVerificationCode("");
+    alert(`Success! Code "${verificationCode}" has been verified on-chain.\nReleased $${amount.toFixed(2)} USDC.\nEarned $${(amount * 0.01).toFixed(2)} USDC in commissions.`);
+  };
+
   return (
     <div className={styles.container}>
       <div className="gridBackground" />
@@ -466,15 +519,15 @@ export default function BoothApplication() {
                 <div className={styles.metricsGrid}>
                   <div className={styles.metricCard}>
                     <span className={styles.metricLabel}>Daily Payouts Verified</span>
-                    <span className={styles.metricValue}>14</span>
+                    <span className={styles.metricValue}>{stats.payouts}</span>
                   </div>
                   <div className={styles.metricCard}>
                     <span className={styles.metricLabel}>Total Volume Processed</span>
-                    <span className={styles.metricValue}>$1,420.00 USDC</span>
+                    <span className={styles.metricValue}>${stats.volume.toFixed(2)} USDC</span>
                   </div>
                   <div className={styles.metricCard}>
                     <span className={styles.metricLabel}>Commissions Earned</span>
-                    <span className={styles.metricValue} style={{ color: "#10B981" }}>+$14.20 USDC</span>
+                    <span className={styles.metricValue} style={{ color: "#10B981" }}>+${stats.commissions.toFixed(2)} USDC</span>
                   </div>
                 </div>
 
@@ -489,11 +542,13 @@ export default function BoothApplication() {
                       type="text" 
                       className={styles.consoleInput} 
                       placeholder="e.g. TXN-894-Manila" 
+                      value={verificationCode}
+                      onChange={(e) => setVerificationCode(e.target.value)}
                     />
                     <button 
                       type="button" 
                       className={styles.consoleBtn}
-                      onClick={() => alert("Cross-border transaction verified on-chain! Cash-out authorized. Release local cash to receiver.")}
+                      onClick={handleVerifyTransfer}
                     >
                       Verify Transfer
                     </button>
@@ -510,6 +565,112 @@ export default function BoothApplication() {
                     Deactivate Booth & Reclaim Stake
                   </button>
                 </div>
+
+                {/* Customer Verification Modal */}
+                {showVerifyModal && (
+                  <div style={{
+                    position: "fixed",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: "rgba(0, 0, 0, 0.8)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    zIndex: 9999,
+                    backdropFilter: "blur(8px)"
+                  }}>
+                    <div style={{
+                      backgroundColor: "rgba(14, 17, 32, 0.98)",
+                      border: "1px solid rgba(153, 69, 255, 0.4)",
+                      borderRadius: "16px",
+                      padding: "24px",
+                      width: "90%",
+                      maxWidth: "400px",
+                      boxShadow: "0 20px 40px rgba(0,0,0,0.8), 0 0 20px rgba(153, 69, 255, 0.2)",
+                      color: "#FFFFFF",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "16px"
+                    }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <h3 style={{ fontSize: "18px", fontWeight: 800 }}>Confirm Remittance Release</h3>
+                        <button 
+                          onClick={() => setShowVerifyModal(false)}
+                          style={{ background: "transparent", border: "none", color: "#94A3B8", cursor: "pointer" }}
+                        >
+                          <X size={18} />
+                        </button>
+                      </div>
+
+                      <div style={{ display: "flex", flexDirection: "column", gap: "12px", fontSize: "14px" }}>
+                        <div>
+                          <span style={{ color: "#94A3B8", display: "block", fontSize: "10px", textTransform: "uppercase" }}>Transaction Pickup Code</span>
+                          <strong style={{ fontSize: "14px", color: "#9945FF", fontFamily: "monospace" }}>{verificationCode}</strong>
+                        </div>
+
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                          <label htmlFor="modalPayoutAmount" style={{ color: "#94A3B8", fontSize: "10px", textTransform: "uppercase" }}>Payout Amount (USDC)</label>
+                          <input 
+                            id="modalPayoutAmount"
+                            type="number" 
+                            value={payoutAmountInput}
+                            onChange={(e) => setPayoutAmountInput(e.target.value)}
+                            style={{
+                              backgroundColor: "rgba(255, 255, 255, 0.05)",
+                              border: "1px solid rgba(255, 255, 255, 0.1)",
+                              borderRadius: "8px",
+                              padding: "10px",
+                              color: "#FFFFFF",
+                              fontSize: "14px",
+                              outline: "none"
+                            }}
+                            placeholder="e.g. 50"
+                          />
+                        </div>
+
+                        <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "12px", display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <span style={{ color: "#94A3B8", fontSize: "10px", textTransform: "uppercase" }}>Calculated Commissions (1% Fee)</span>
+                          <strong style={{ fontSize: "15px", color: "#10B981" }}>
+                            +${(parseFloat(payoutAmountInput || "0") * 0.01).toFixed(2)} USDC
+                          </strong>
+                        </div>
+                      </div>
+
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginTop: "8px" }}>
+                        <button 
+                          onClick={() => setShowVerifyModal(false)}
+                          style={{
+                            backgroundColor: "rgba(255, 255, 255, 0.05)",
+                            color: "#FFFFFF",
+                            border: "1px solid rgba(255, 255, 255, 0.1)",
+                            borderRadius: "8px",
+                            padding: "10px",
+                            fontWeight: 600,
+                            cursor: "pointer"
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button 
+                          onClick={confirmVerifyTransfer}
+                          style={{
+                            backgroundColor: "#9945FF",
+                            color: "#FFFFFF",
+                            border: "none",
+                            borderRadius: "8px",
+                            padding: "10px",
+                            fontWeight: 700,
+                            cursor: "pointer"
+                          }}
+                        >
+                          Confirm Release
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
