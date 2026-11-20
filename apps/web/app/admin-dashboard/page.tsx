@@ -18,7 +18,7 @@ import {
   Loader2,
   AlertTriangle
 } from "lucide-react";
-import { createWalletClient, createPublicClient, custom, http, formatUnits, parseGwei } from "viem";
+import { createWalletClient, createPublicClient, custom, http, formatUnits } from "viem";
 import { polygonAmoy } from "viem/chains";
 import styles from "./page.module.css";
 
@@ -77,7 +77,6 @@ interface Applicant {
 
 export default function AdminDashboard() {
   const [isAuthorized, setIsAuthorized] = useState(false);
-  const [passcode, setPasscode] = useState("");
   const [loginError, setLoginError] = useState("");
 
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
@@ -142,39 +141,50 @@ export default function AdminDashboard() {
         transport: http(rpcUrl)
       });
 
-      // 1. Get addresses registered on-chain
       const addresses = await publicClient.readContract({
         address: registryAddress as `0x${string}`,
         abi: BOOTH_REGISTRY_ABI,
         functionName: "getBoothAddresses"
       });
 
-      // 2. Fetch details for each booth address
-      const loaded: Applicant[] = [];
-      for (const addr of addresses) {
-        const [ipfsHash, collateralRaw, statusNum, submittedAtRaw] = await publicClient.readContract({
+      const boothResults = await publicClient.multicall({
+        contracts: addresses.map((addr) => ({
           address: registryAddress as `0x${string}`,
           abi: BOOTH_REGISTRY_ABI,
-          functionName: "booths",
-          args: [addr]
-        });
+          functionName: "booths" as const,
+          args: [addr] as const
+        }))
+      });
 
-        const statusMap = ["PENDING", "APPROVED", "REJECTED"] as const;
-
-        const applicant: Applicant = {
-          address: addr,
-          ipfsHash,
-          collateral: Number(formatUnits(collateralRaw, 6)),
-          status: statusMap[statusNum] || "PENDING",
-          submittedAt: Number(submittedAtRaw) * 1000 // Convert to ms
-        };
-
-        // Fetch IPFS metadata payload
-        if (ipfsHash) {
+      const statusMap = ["PENDING", "APPROVED", "REJECTED"] as const;
+      const fetchIpfsMeta = async (ipfsHash: string) => {
+        const gateways = [`https://ipfs.io/ipfs/${ipfsHash}`, `https://gateway.pinata.cloud/ipfs/${ipfsHash}`];
+        for (const url of gateways) {
           try {
-            const metaRes = await fetch(`https://ipfs.io/ipfs/${ipfsHash}`, { signal: AbortSignal.timeout(3000) });
-            if (metaRes.ok) {
-              const meta = await metaRes.json();
+            const metaRes = await fetch(url, { signal: AbortSignal.timeout(3000) });
+            if (metaRes.ok) return await metaRes.json();
+          } catch {
+            continue;
+          }
+        }
+        return null;
+      };
+
+      const settled = await Promise.allSettled(
+        addresses.map(async (addr, idx) => {
+          const entry = boothResults[idx];
+          if (!entry || entry.status !== "success") return null;
+          const [ipfsHash, collateralRaw, statusNum, submittedAtRaw] = entry.result;
+          const applicant: Applicant = {
+            address: addr,
+            ipfsHash,
+            collateral: Number(formatUnits(collateralRaw, 6)),
+            status: statusMap[statusNum] || "PENDING",
+            submittedAt: Number(submittedAtRaw) * 1000
+          };
+          if (ipfsHash) {
+            const meta = await fetchIpfsMeta(ipfsHash);
+            if (meta) {
               applicant.storeName = meta.storeName;
               applicant.ownerName = meta.ownerName;
               applicant.email = meta.email;
@@ -182,29 +192,15 @@ export default function AdminDashboard() {
               applicant.coordinates = meta.coordinates;
               applicant.description = meta.description;
             }
-          } catch (e) {
-            // Fallback gateway
-            try {
-              const metaRes = await fetch(`https://gateway.pinata.cloud/ipfs/${ipfsHash}`, { signal: AbortSignal.timeout(3000) });
-              if (metaRes.ok) {
-                const meta = await metaRes.json();
-                applicant.storeName = meta.storeName;
-                applicant.ownerName = meta.ownerName;
-                applicant.email = meta.email;
-                applicant.addressText = meta.address;
-                applicant.coordinates = meta.coordinates;
-                applicant.description = meta.description;
-              }
-            } catch (err) {
-              console.warn("Failed to resolve IPFS hash for", addr, err);
-            }
           }
-        }
+          return applicant;
+        })
+      );
 
-        loaded.push(applicant);
-      }
+      const loaded = settled
+        .filter((r): r is PromiseFulfilledResult<Applicant | null> => r.status === "fulfilled" && r.value !== null)
+        .map((r) => r.value!);
 
-      // Sort with newest submissions first
       setApplicants(loaded.reverse());
     } catch (e: any) {
       setActionError(e.message || "Failed to load booth list from contract.");
@@ -236,19 +232,54 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (passcode === "admin123") {
+    setLoginError("");
+    if (typeof window === "undefined" || !(window as any).ethereum) {
+      setLoginError("MetaMask or compatible Web3 wallet is required.");
+      return;
+    }
+    if (!registryAddress) {
+      setLoginError("BoothRegistry contract address is not configured.");
+      return;
+    }
+    try {
+      const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" });
+      const activeAccount = accounts[0] as `0x${string}`;
+      setWalletAddress(activeAccount);
+
+      const publicClient = createPublicClient({
+        chain: polygonAmoy,
+        transport: http(rpcUrl)
+      });
+      const ownerAddr = await publicClient.readContract({
+        address: registryAddress as `0x${string}`,
+        abi: BOOTH_REGISTRY_ABI,
+        functionName: "owner"
+      });
+      if (ownerAddr.toLowerCase() !== activeAccount.toLowerCase()) {
+        setLoginError("Connected wallet is not the BoothRegistry owner.");
+        return;
+      }
+
+      const walletClient = createWalletClient({
+        chain: polygonAmoy,
+        transport: custom((window as any).ethereum)
+      });
+      await walletClient.signMessage({
+        account: activeAccount,
+        message: `RemitChain Admin Login:${activeAccount.toLowerCase()}:${Date.now()}`
+      });
+      setIsContractOwner(true);
       setIsAuthorized(true);
-      setLoginError("");
-    } else {
-      setLoginError("Invalid Administrator Passcode. Access Denied.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Wallet authentication failed.";
+      setLoginError(message);
     }
   };
 
   const handleLogout = () => {
     setIsAuthorized(false);
-    setPasscode("");
   };
 
   const ensureCorrectChain = async () => {
@@ -341,9 +372,7 @@ export default function AdminDashboard() {
         abi: BOOTH_REGISTRY_ABI,
         functionName: "reviewBooth",
         args: [vendor as `0x${string}`, newStatus],
-        account: currentWallet as `0x${string}`,
-        maxFeePerGas: parseGwei("30"),
-        maxPriorityFeePerGas: parseGwei("30")
+        account: currentWallet as `0x${string}`
       });
 
       await publicClient.waitForTransactionReceipt({ hash: txHash });
@@ -467,19 +496,8 @@ export default function AdminDashboard() {
               )}
 
               <form onSubmit={handleLogin} className={styles.loginForm}>
-                <div className={styles.formField}>
-                  <label className={styles.fieldLabel}>Security Passcode</label>
-                  <input 
-                    type="password" 
-                    className={styles.passcodeInput} 
-                    placeholder="••••••••••••"
-                    value={passcode}
-                    onChange={(e) => setPasscode(e.target.value)}
-                    required
-                  />
-                </div>
                 <button type="submit" className={styles.loginBtn}>
-                  Verify Credentials
+                  Sign In with Contract Owner Wallet
                 </button>
               </form>
             </div>

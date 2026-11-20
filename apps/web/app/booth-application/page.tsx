@@ -15,8 +15,9 @@ import {
   AlertTriangle,
   X
 } from "lucide-react";
-import { createWalletClient, createPublicClient, custom, http, parseUnits, parseGwei, formatUnits } from "viem";
+import { createWalletClient, createPublicClient, custom, http, parseUnits, formatUnits } from "viem";
 import { polygonAmoy } from "viem/chains";
+import { REMITTANCE_ESCROW_ABI } from "@repo/contracts-sdk";
 import styles from "./page.module.css";
 
 const IERC20_ABI = [
@@ -90,10 +91,12 @@ export default function BoothApplication() {
   const [checkingExisting, setCheckingExisting] = useState(false);
   const [stats, setStats] = useState({ payouts: 0, volume: 0, commissions: 0 });
   const [verificationCode, setVerificationCode] = useState("");
+  const [orderIdInput, setOrderIdInput] = useState("");
   const [showVerifyModal, setShowVerifyModal] = useState(false);
   const [payoutAmountInput, setPayoutAmountInput] = useState("50");
 
   const registryAddress = process.env.NEXT_PUBLIC_BOOTH_REGISTRY_ADDRESS;
+  const escrowAddress = process.env.NEXT_PUBLIC_REMITTANCE_ESCROW_ADDRESS;
   const usdcAddress = process.env.NEXT_PUBLIC_USDC_ADDRESS || "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582";
   const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || "https://rpc-amoy.polygon.technology/";
 
@@ -240,18 +243,36 @@ export default function BoothApplication() {
 
     try {
       await ensureCorrectChain();
-      // 1. IPFS Upload Proxy
+      const walletClient = createWalletClient({
+        chain: polygonAmoy,
+        transport: custom((window as any).ethereum)
+      });
+      const publicClient = createPublicClient({
+        chain: polygonAmoy,
+        transport: http(rpcUrl)
+      });
+
+      setTxStep("Signing metadata upload authorization...");
+      const timestamp = Date.now();
+      const pinSignature = await walletClient.signMessage({
+        account: walletAddress as `0x${string}`,
+        message: `RemitChain Booth Pin:${walletAddress.toLowerCase()}:${timestamp}`
+      });
+
       setTxStep("Uploading metadata details to IPFS...");
       const ipfsResponse = await fetch("/api/ipfs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          storeName,
-          ownerName,
-          email,
-          address,
-          coordinates,
-          description
+          address: walletAddress,
+          signature: pinSignature,
+          timestamp,
+          metadata: {
+            storeName,
+            address,
+            coordinates,
+            description
+          }
         })
       });
 
@@ -263,43 +284,27 @@ export default function BoothApplication() {
       const { ipfsHash } = await ipfsResponse.json();
       setTxStep(`IPFS Upload complete! Hash: ${ipfsHash.slice(0, 8)}...`);
 
-      // 2. Set up viem clients
-      const walletClient = createWalletClient({
-        chain: polygonAmoy,
-        transport: custom((window as any).ethereum)
-      });
-      const publicClient = createPublicClient({
-        chain: polygonAmoy,
-        transport: http(rpcUrl)
-      });
+      const collateralAmount = parseUnits(collateral, 6);
 
-      const collateralAmount = parseUnits(collateral, 6); // USDC uses 6 decimals
-
-      // 3. Approve USDC allowance
       setTxStep("Requesting USDC collateral allowance...");
       const approveTxHash = await walletClient.writeContract({
         address: usdcAddress as `0x${string}`,
         abi: IERC20_ABI,
         functionName: "approve",
         args: [registryAddress as `0x${string}`, collateralAmount],
-        account: walletAddress as `0x${string}`,
-        maxFeePerGas: parseGwei("30"),
-        maxPriorityFeePerGas: parseGwei("30")
+        account: walletAddress as `0x${string}`
       });
       
       setTxStep("Confirming USDC allowance transaction on-chain...");
       await publicClient.waitForTransactionReceipt({ hash: approveTxHash });
 
-      // 4. Call applyForBooth on Registry contract
       setTxStep("Registering booth on-chain...");
       const applyTxHash = await walletClient.writeContract({
         address: registryAddress as `0x${string}`,
         abi: BOOTH_REGISTRY_ABI,
         functionName: "applyForBooth",
         args: [ipfsHash, collateralAmount],
-        account: walletAddress as `0x${string}`,
-        maxFeePerGas: parseGwei("30"),
-        maxPriorityFeePerGas: parseGwei("30")
+        account: walletAddress as `0x${string}`
       });
 
       setTxStep("Confirming booth registration on-chain...");
@@ -346,9 +351,7 @@ export default function BoothApplication() {
         abi: BOOTH_REGISTRY_ABI,
         functionName: "cancelApplication",
         args: [],
-        account: walletAddress as `0x${string}`,
-        maxFeePerGas: parseGwei("30"),
-        maxPriorityFeePerGas: parseGwei("30")
+        account: walletAddress as `0x${string}`
       });
 
       setTxStep("Confirming collateral withdrawal on-chain...");
@@ -372,28 +375,62 @@ export default function BoothApplication() {
     setShowVerifyModal(true);
   };
 
-  const confirmVerifyTransfer = () => {
+  const confirmVerifyTransfer = async () => {
     const amount = parseFloat(payoutAmountInput);
     if (isNaN(amount) || amount <= 0) {
       alert("Please enter a valid payout amount.");
       return;
     }
-
-    const newStats = {
-      payouts: stats.payouts + 1,
-      volume: stats.volume + amount,
-      commissions: stats.commissions + (amount * 0.01) // 1% commission
-    };
-
-    setStats(newStats);
-    if (walletAddress) {
-      const key = `remitchain_merchant_stats_${walletAddress.toLowerCase()}`;
-      localStorage.setItem(key, JSON.stringify(newStats));
+    if (!walletAddress || !escrowAddress || !orderIdInput.trim()) {
+      alert("Connect your booth wallet, configure NEXT_PUBLIC_REMITTANCE_ESCROW_ADDRESS, and enter the Escrow Order ID.");
+      return;
     }
 
-    setShowVerifyModal(false);
-    setVerificationCode("");
-    alert(`Success! Code "${verificationCode}" has been verified on-chain.\nReleased $${amount.toFixed(2)} USDC.\nEarned $${(amount * 0.01).toFixed(2)} USDC in commissions.`);
+    setIsSubmitting(true);
+    setFormError(null);
+    setTxStep("Claiming escrowed USDC on-chain...");
+    try {
+      await ensureCorrectChain();
+      const walletClient = createWalletClient({
+        chain: polygonAmoy,
+        transport: custom((window as any).ethereum)
+      });
+      const publicClient = createPublicClient({
+        chain: polygonAmoy,
+        transport: http(rpcUrl)
+      });
+
+      const txHash = await walletClient.writeContract({
+        address: escrowAddress as `0x${string}`,
+        abi: REMITTANCE_ESCROW_ABI,
+        functionName: "claimOrder",
+        args: [BigInt(orderIdInput.trim()), verificationCode.trim()],
+        account: walletAddress as `0x${string}`
+      });
+
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
+
+      const newStats = {
+        payouts: stats.payouts + 1,
+        volume: stats.volume + amount,
+        commissions: stats.commissions + (amount * 0.01)
+      };
+
+      setStats(newStats);
+      const key = `remitchain_merchant_stats_${walletAddress.toLowerCase()}`;
+      localStorage.setItem(key, JSON.stringify(newStats));
+
+      setShowVerifyModal(false);
+      setVerificationCode("");
+      setOrderIdInput("");
+      alert(`Code "${verificationCode}" verified on-chain (tx: ${txHash.slice(0, 10)}...).`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to claim escrow order on-chain.";
+      setFormError(message);
+    } finally {
+      setIsSubmitting(false);
+      setTxStep("");
+    }
   };
 
   return (
@@ -608,6 +645,26 @@ export default function BoothApplication() {
                         <div>
                           <span style={{ color: "#94A3B8", display: "block", fontSize: "10px", textTransform: "uppercase" }}>Transaction Pickup Code</span>
                           <strong style={{ fontSize: "14px", color: "#9945FF", fontFamily: "monospace" }}>{verificationCode}</strong>
+                        </div>
+
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                          <label htmlFor="modalOrderId" style={{ color: "#94A3B8", fontSize: "10px", textTransform: "uppercase" }}>Escrow Order ID</label>
+                          <input
+                            id="modalOrderId"
+                            type="number"
+                            value={orderIdInput}
+                            onChange={(e) => setOrderIdInput(e.target.value)}
+                            style={{
+                              backgroundColor: "rgba(255, 255, 255, 0.05)",
+                              border: "1px solid rgba(255, 255, 255, 0.1)",
+                              borderRadius: "8px",
+                              padding: "10px",
+                              color: "#FFFFFF",
+                              fontSize: "14px",
+                              outline: "none"
+                            }}
+                            placeholder="e.g. 1"
+                          />
                         </div>
 
                         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>

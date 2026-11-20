@@ -92,61 +92,62 @@ export default function Globe() {
           functionName: "getBoothAddresses"
         });
 
-        const points: BoothPoint[] = [];
-        for (const addr of addresses) {
-          const [ipfsHash, collateralRaw, statusNum] = await publicClient.readContract({
+        const boothResults = await publicClient.multicall({
+          contracts: addresses.map((addr) => ({
             address: registryAddress as `0x${string}`,
             abi: BOOTH_REGISTRY_ABI,
-            functionName: "booths",
-            args: [addr]
-          });
+            functionName: "booths" as const,
+            args: [addr] as const
+          }))
+        });
 
-          if (statusNum === 1 && ipfsHash) {
+        const approvedEntries = addresses
+          .map((addr, idx) => ({ addr, res: boothResults[idx] }))
+          .filter(
+            (entry): entry is { addr: `0x${string}`; res: { status: "success"; result: readonly [string, bigint, number, bigint] } } =>
+              entry.res?.status === "success" && entry.res.result[2] === 1 && Boolean(entry.res.result[0])
+          );
+
+        const fetchIpfsMeta = async (ipfsHash: string) => {
+          const gateways = [`https://ipfs.io/ipfs/${ipfsHash}`, `https://gateway.pinata.cloud/ipfs/${ipfsHash}`];
+          for (const url of gateways) {
             try {
-              const res = await fetch(`https://ipfs.io/ipfs/${ipfsHash}`, { signal: AbortSignal.timeout(2500) });
-              if (res.ok) {
-                const meta = await res.json();
-                const coords = meta.coordinates ? meta.coordinates.split(",") : [];
-                if (coords.length === 2) {
-                  points.push({
-                    lat: parseFloat(coords[0]),
-                    lng: parseFloat(coords[1]),
-                    name: meta.storeName || `Booth ${addr.slice(0, 6)}`,
-                    address: meta.address || "No address provided",
-                    email: meta.email || "No email provided",
-                    owner: meta.ownerName || "Unknown",
-                    collateral: Number(formatUnits(collateralRaw, 6)),
-                    coordinates: meta.coordinates,
-                    status: "Active"
-                  });
-                }
-              }
+              const res = await fetch(url, { signal: AbortSignal.timeout(2500) });
+              if (res.ok) return await res.json();
             } catch {
-              try {
-                const res = await fetch(`https://gateway.pinata.cloud/ipfs/${ipfsHash}`, { signal: AbortSignal.timeout(2500) });
-                if (res.ok) {
-                  const meta = await res.json();
-                  const coords = meta.coordinates ? meta.coordinates.split(",") : [];
-                  if (coords.length === 2) {
-                    points.push({
-                      lat: parseFloat(coords[0]),
-                      lng: parseFloat(coords[1]),
-                      name: meta.storeName || `Booth ${addr.slice(0, 6)}`,
-                      address: meta.address || "No address provided",
-                      email: meta.email || "No email provided",
-                      owner: meta.ownerName || "Unknown",
-                      collateral: Number(formatUnits(collateralRaw, 6)),
-                      coordinates: meta.coordinates,
-                      status: "Active"
-                    });
-                  }
-                }
-              } catch (e2) {
-                console.warn("Failed to fetch coordinates for globe", ipfsHash, e2);
-              }
+              continue;
             }
           }
-        }
+          return null;
+        };
+
+        const settled = await Promise.allSettled(
+          approvedEntries.map(async ({ addr, res }) => {
+            const [ipfsHash, collateralRaw] = res.result;
+            const meta = await fetchIpfsMeta(ipfsHash);
+            if (!meta?.coordinates) return null;
+            const coords = String(meta.coordinates).split(",");
+            if (coords.length !== 2) return null;
+            const lat = parseFloat(coords[0] ?? "");
+            const lng = parseFloat(coords[1] ?? "");
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+            return {
+              lat,
+              lng,
+              name: meta.storeName || `Booth ${addr.slice(0, 6)}`,
+              address: meta.address || "No address provided",
+              email: meta.email || "No email provided",
+              owner: meta.ownerName || "Unknown",
+              collateral: Number(formatUnits(collateralRaw, 6)),
+              coordinates: meta.coordinates,
+              status: "Active"
+            } as BoothPoint;
+          })
+        );
+
+        const points = settled
+          .filter((r): r is PromiseFulfilledResult<BoothPoint | null> => r.status === "fulfilled" && r.value !== null)
+          .map((r) => r.value!);
         setBooths(points);
       } catch (err) {
         console.error("Failed to load booths for globe", err);
