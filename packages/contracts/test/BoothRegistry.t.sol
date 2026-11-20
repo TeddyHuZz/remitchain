@@ -1,0 +1,48 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import {Test} from "forge-std/Test.sol";
+import {MockUSDC} from "../src/MockUSDC.sol";
+import {BoothRegistry} from "../src/BoothRegistry.sol";
+
+contract BoothRegistryTest is Test {
+    MockUSDC usdc;
+    BoothRegistry registry;
+    address vendor = address(0x1234);
+
+    function setUp() public {
+        usdc = new MockUSDC();
+        registry = new BoothRegistry(address(usdc));
+        usdc.mint(vendor, 100 * 10 ** 6);
+        vm.prank(vendor);
+        usdc.approve(address(registry), type(uint256).max);
+    }
+
+    function test_ApplyReviewAndReapplyAfterRejection() public {
+        vm.prank(vendor);
+        registry.applyForBooth("QmTest1", 10 * 10 ** 6);
+
+        registry.reviewBooth(vendor, BoothRegistry.Status.Rejected);
+        assertEq(usdc.balanceOf(vendor), 100 * 10 ** 6);
+
+        vm.prank(vendor);
+        registry.applyForBooth("QmTest2", 15 * 10 ** 6);
+        assertEq(registry.getBoothAddresses().length, 1);
+    }
+
+    function test_RevertReviewToPending() public {
+        vm.prank(vendor);
+        registry.applyForBooth("QmTest1", 10 * 10 ** 6);
+        vm.expectRevert("Invalid target status");
+        registry.reviewBooth(vendor, BoothRegistry.Status.Pending);
+    }
+
+    function test_CancelApplicationRefundsCollateral() public {
+        vm.prank(vendor);
+        registry.applyForBooth("QmTest1", 10 * 10 ** 6);
+        vm.prank(vendor);
+        registry.cancelApplication();
+        assertEq(usdc.balanceOf(vendor), 100 * 10 ** 6);
+        assertEq(registry.getBoothAddresses().length, 0);
+    }
+}
