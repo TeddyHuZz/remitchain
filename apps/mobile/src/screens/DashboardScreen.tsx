@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
+import { isAddress } from 'viem';
 import { walletService, WalletState } from '../services/walletService';
 import BoothsTab, { BoothInfo } from './BoothsTab';
 import HistoryTab, { TxItem } from './HistoryTab';
@@ -118,16 +119,18 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
   };
 
   const handleSendTransfer = async () => {
-    if (isSplit) {
-      if (!recipient.trim() || !savingsRecipient.trim() || !amount.trim()) {
-        Alert.alert("Error", "Please fill in recipient addresses and total USDC amount.");
-        return;
-      }
-    } else {
-      if (!recipient.trim() || !amount.trim()) {
-        Alert.alert("Error", "Please fill in recipient address and USDC amount.");
-        return;
-      }
+    const parsedAmount = parseFloat(amount.trim());
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      Alert.alert("Error", "Please enter a valid positive USDC amount.");
+      return;
+    }
+    if (!isAddress(recipient.trim())) {
+      Alert.alert("Error", "Please enter a valid 0x recipient address.");
+      return;
+    }
+    if (isSplit && !isAddress(savingsRecipient.trim())) {
+      Alert.alert("Error", "Please enter a valid 0x savings address.");
+      return;
     }
 
     setIsSending(true);

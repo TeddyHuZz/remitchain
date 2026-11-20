@@ -122,35 +122,34 @@ try {
   console.warn("Failed to polyfill Linking.removeEventListener:", e);
 }
 
-// Polyfill NativeSourceCode and TurboModuleRegistry to prevent Expo's async-require from crashing when getDevServer().url returns undefined in Bridgeless mode.
-try {
-  const SourceCode = NativeModules.SourceCode || {};
-  if (!SourceCode.scriptURL) {
-    SourceCode.scriptURL = 'http://10.0.2.2:8081/index.bundle?platform=android&dev=true';
-  }
-  Object.defineProperty(NativeModules, 'SourceCode', {
-    value: SourceCode,
-    writable: true,
-    configurable: true,
-  });
-} catch (e) {
-  // Silent fallback
-}
+if (__DEV__) {
+  try {
+    const SourceCode = NativeModules.SourceCode || {};
+    if (!SourceCode.scriptURL) {
+      SourceCode.scriptURL = 'http://10.0.2.2:8081/index.bundle?platform=android&dev=true';
+    }
+    Object.defineProperty(NativeModules, 'SourceCode', {
+      value: SourceCode,
+      writable: true,
+      configurable: true,
+    });
+  } catch (e) {}
 
-try {
-  if (TurboModuleRegistry && typeof TurboModuleRegistry.get === 'function') {
-    const originalGet = TurboModuleRegistry.get;
-    (TurboModuleRegistry as any).get = (name: string): any => {
-      if (name === 'SourceCode') {
-        return {
-          getConstants: () => ({
-            scriptURL: 'http://10.0.2.2:8081/index.bundle?platform=android&dev=true',
-          }),
-        };
-      }
-      return originalGet(name);
-    };
+  try {
+    if (TurboModuleRegistry && typeof TurboModuleRegistry.get === 'function') {
+      const originalGet = TurboModuleRegistry.get;
+      (TurboModuleRegistry as any).get = (name: string): any => {
+        if (name === 'SourceCode') {
+          return {
+            getConstants: () => ({
+              scriptURL: 'http://10.0.2.2:8081/index.bundle?platform=android&dev=true',
+            }),
+          };
+        }
+        return originalGet(name);
+      };
+    }
+  } catch (e) {
+    console.warn('[Polyfill] Failed to patch TurboModuleRegistry:', e);
   }
-} catch (e) {
-  console.warn('[Polyfill] Failed to patch TurboModuleRegistry:', e);
 }

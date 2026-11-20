@@ -11,6 +11,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { createPublicClient, http, formatUnits } from 'viem';
+import { polygonAmoy } from 'viem/chains';
+import { BOOTH_REGISTRY_ABI } from '@repo/contracts-sdk';
 import { WEB3_CONFIG } from '../config/env';
 
 export interface BoothInfo {
@@ -38,29 +40,9 @@ export default function BoothsTab({ onSelectBooth }: BoothsTabProps) {
     setLoading(true);
     try {
       const publicClient = createPublicClient({
+        chain: polygonAmoy,
         transport: http(WEB3_CONFIG.PUBLIC_RPC_URL)
       });
-      const BOOTH_REGISTRY_ABI = [
-        {
-          name: "getBoothAddresses",
-          type: "function",
-          stateMutability: "view",
-          inputs: [],
-          outputs: [{ name: "", type: "address[]" }]
-        },
-        {
-          name: "booths",
-          type: "function",
-          stateMutability: "view",
-          inputs: [{ name: "", type: "address" }],
-          outputs: [
-            { name: "ipfsHash", type: "string" },
-            { name: "collateral", type: "uint256" },
-            { name: "status", type: "uint8" },
-            { name: "submittedAt", type: "uint256" }
-          ]
-        }
-      ] as const;
 
       const addresses = await publicClient.readContract({
         address: WEB3_CONFIG.BOOTH_REGISTRY_ADDRESS as `0x${string}`,
@@ -68,57 +50,77 @@ export default function BoothsTab({ onSelectBooth }: BoothsTabProps) {
         functionName: "getBoothAddresses"
       });
 
-      const list: BoothInfo[] = [];
-      for (const addr of addresses) {
-        const [ipfsHash, collateralRaw, statusNum] = await publicClient.readContract({
+      const boothResults = await publicClient.multicall({
+        contracts: addresses.map((addr) => ({
           address: WEB3_CONFIG.BOOTH_REGISTRY_ADDRESS as `0x${string}`,
           abi: BOOTH_REGISTRY_ABI,
-          functionName: "booths",
-          args: [addr]
-        });
+          functionName: "booths" as const,
+          args: [addr] as const
+        }))
+      });
 
-        // statusNum: 1 = Approved
-        if (statusNum === 1) {
+      const fetchWithTimeout = async (url: string, timeoutMs = 3000) => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          return await fetch(url, { signal: controller.signal });
+        } finally {
+          clearTimeout(timer);
+        }
+      };
+
+      const fetchIpfsMeta = async (ipfsHash: string) => {
+        const gateways = [`https://ipfs.io/ipfs/${ipfsHash}`, `https://gateway.pinata.cloud/ipfs/${ipfsHash}`];
+        for (const url of gateways) {
+          try {
+            const res = await fetchWithTimeout(url, 3000);
+            if (res.ok) return await res.json();
+          } catch {
+            continue;
+          }
+        }
+        return null;
+      };
+
+      const approvedEntries = addresses
+        .map((addr, idx) => ({ addr, res: boothResults[idx] }))
+        .filter(
+          (entry): entry is { addr: `0x${string}`; res: { status: "success"; result: readonly [string, bigint, number, bigint] } } =>
+            entry.res?.status === "success" && entry.res.result[2] === 1
+        );
+
+      const settled = await Promise.allSettled(
+        approvedEntries.map(async ({ addr, res }): Promise<BoothInfo> => {
+          const [ipfsHash, collateralRaw] = res.result;
           let name = `Booth ${addr.slice(0, 6)}...${addr.slice(-4)}`;
-          let location = "Loading details...";
+          let location = "Location unavailable";
           let hours = "9 AM - 6 PM";
 
           if (ipfsHash) {
-            try {
-              const res = await fetch(`https://ipfs.io/ipfs/${ipfsHash}`, { signal: AbortSignal.timeout(3000) });
-              if (res.ok) {
-                const meta = await res.json();
-                name = meta.storeName || name;
-                location = meta.address || location;
-                hours = meta.description || hours;
-              }
-            } catch (e) {
-              try {
-                const res = await fetch(`https://gateway.pinata.cloud/ipfs/${ipfsHash}`, { signal: AbortSignal.timeout(3000) });
-                if (res.ok) {
-                  const meta = await res.json();
-                  name = meta.storeName || name;
-                  location = meta.address || location;
-                  hours = meta.description || hours;
-                }
-              } catch (e2) {
-                console.warn("Failed to fetch IPFS in React Native", ipfsHash);
-              }
+            const meta = await fetchIpfsMeta(ipfsHash);
+            if (meta) {
+              name = meta.storeName || name;
+              location = meta.address || location;
+              hours = meta.description || hours;
             }
           }
 
-          list.push({
+          return {
             id: addr,
             name,
             location,
             address: addr,
             liquidity: Number(formatUnits(collateralRaw, 6)).toString(),
-            status: 'open',
+            status: 'open' as const,
             hours,
             phone: ''
-          });
-        }
-      }
+          };
+        })
+      );
+
+      const list = settled
+        .filter((r): r is PromiseFulfilledResult<BoothInfo> => r.status === "fulfilled")
+        .map((r) => r.value);
       setBooths(list);
     } catch (e) {
       console.error("Failed to load booths from contract in mobile app", e);

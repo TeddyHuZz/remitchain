@@ -22,13 +22,12 @@ export const WEB3_CONFIG = {
   BUNDLER_URL: (projectId: string, chainId = 80002) => `https://rpc.zerodev.app/api/v3/${projectId}/chain/${chainId}?selfFunded=true`,
   PAYMASTER_URL: (projectId: string, chainId = 80002) => `https://rpc.zerodev.app/api/v3/${projectId}/chain/${chainId}?selfFunded=true`,
   
-  // Public Polygon Amoy RPC for read-only actions (using official node to prevent 500 DevTools interception)
-  PUBLIC_RPC_URL: "https://rpc-amoy.polygon.technology/",
-  
-  // Deployed smart contract address configs
-  BOOTH_REGISTRY_ADDRESS: "0x7bCB577350e600c1372036094f7F7464e54E90b6",
-  USDC_ADDRESS: "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582",
+  PUBLIC_RPC_URL: process.env.EXPO_PUBLIC_RPC_URL || "https://rpc-amoy.polygon.technology/",
 
-  // Mock fallback flag: true if we use local/simulated wallet derivation when ZeroDev Project ID is default/missing
+  BOOTH_REGISTRY_ADDRESS: process.env.EXPO_PUBLIC_BOOTH_REGISTRY_ADDRESS || "0x7bCB577350e600c1372036094f7F7464e54E90b6",
+  USDC_ADDRESS: process.env.EXPO_PUBLIC_USDC_ADDRESS || "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582",
+  YIELD_VAULT_ADDRESS: process.env.EXPO_PUBLIC_YIELD_VAULT_ADDRESS || "0x0000000000000000000000000000000000000000",
+  REMITTANCE_ESCROW_ADDRESS: process.env.EXPO_PUBLIC_REMITTANCE_ESCROW_ADDRESS || "0x0000000000000000000000000000000000000000",
+
   USE_SIMULATION: true,
 };

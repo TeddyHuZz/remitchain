@@ -1,8 +1,19 @@
 import * as SecureStore from 'expo-secure-store';
-import { createPublicClient, http, Hex, encodeFunctionData } from 'viem';
+import {
+  createPublicClient,
+  http,
+  Hex,
+  encodeFunctionData,
+  parseUnits,
+  formatUnits,
+  isAddress,
+  keccak256,
+  toBytes,
+} from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { polygonAmoy } from 'viem/chains';
 import { generatePrivateKey } from 'viem/accounts';
+import { ERC20_ABI, REMITTANCE_ESCROW_ABI, YIELD_VAULT_ABI } from '@repo/contracts-sdk';
 import { WEB3_CONFIG } from '../config/env';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { signerToEcdsaValidator } from '@zerodev/ecdsa-validator';
@@ -30,6 +41,64 @@ export interface WalletState {
 class WalletService {
   private activeWallet: WalletState | null = null;
   private web3auth: any = null;
+  private cachedKernelClient: any = null;
+  private cachedKernelOwner: string | null = null;
+
+  private async getKernelClient(onStatusChange?: (status: string) => void) {
+    onStatusChange?.("Retrieving device credentials...");
+    const authOptions = await this.getAuthOptions('Authorize transaction');
+    const privKey = await SecureStore.getItemAsync(EOA_PRIVATE_KEY_KEY, authOptions);
+    if (!privKey) throw new Error("Owner private key not found in storage.");
+
+    const ownerAccount = privateKeyToAccount(privKey as Hex);
+    if (this.cachedKernelClient && this.cachedKernelOwner === ownerAccount.address) {
+      return this.cachedKernelClient;
+    }
+
+    onStatusChange?.("Connecting to RPC Network...");
+    const bundlerRpcUrl = WEB3_CONFIG.BUNDLER_URL(WEB3_CONFIG.ZERODEV_PROJECT_ID);
+    const publicClient = createPublicClient({
+      chain: polygonAmoy,
+      transport: http(WEB3_CONFIG.PUBLIC_RPC_URL),
+    });
+
+    onStatusChange?.("Initializing Smart Account...");
+    const entryPoint = getEntryPoint("0.7");
+    const kernelVersion = KERNEL_V3_1;
+
+    const ecdsaValidator = await signerToEcdsaValidator(publicClient, {
+      signer: ownerAccount,
+      entryPoint,
+      kernelVersion,
+    });
+
+    const account = await createKernelAccount(publicClient, {
+      plugins: { sudo: ecdsaValidator },
+      entryPoint,
+      kernelVersion,
+    });
+
+    onStatusChange?.("Setting up gasless paymaster...");
+    const paymasterClient = createZeroDevPaymasterClient({
+      chain: polygonAmoy,
+      transport: http(bundlerRpcUrl),
+    });
+
+    const kernelClient = createKernelAccountClient({
+      account,
+      chain: polygonAmoy,
+      bundlerTransport: http(bundlerRpcUrl),
+      paymaster: {
+        getPaymasterData: async (userOperation) => {
+          return paymasterClient.sponsorUserOperation({ userOperation });
+        },
+      },
+    });
+
+    this.cachedKernelClient = kernelClient;
+    this.cachedKernelOwner = ownerAccount.address;
+    return kernelClient;
+  }
 
   private async getWeb3Auth(): Promise<any> {
     if (this.web3auth) return this.web3auth;
@@ -80,29 +149,28 @@ class WalletService {
    */
   async getOrCreatePrivateKey(): Promise<Hex> {
     const authOptions = await this.getAuthOptions('Verify your identity to unlock your secure vault key');
-    try {
-      let privKey = await SecureStore.getItemAsync(EOA_PRIVATE_KEY_KEY, authOptions);
-      if (!privKey) {
-        privKey = generatePrivateKey();
-        await SecureStore.setItemAsync(EOA_PRIVATE_KEY_KEY, privKey, authOptions);
-      }
-      return privKey as Hex;
-    } catch (error) {
-      console.warn("SecureStore error, falling back to ephemeral session private key:", error);
-      // Fallback if simulator has secure store disabled or errors out
-      return generatePrivateKey();
+    let privKey = await SecureStore.getItemAsync(EOA_PRIVATE_KEY_KEY, authOptions);
+    if (!privKey) {
+      privKey = generatePrivateKey();
+      await SecureStore.setItemAsync(EOA_PRIVATE_KEY_KEY, privKey, authOptions);
     }
+    return privKey as Hex;
   }
 
-  /**
-   * Clears the stored keys from the device (Log Out)
-   */
   async clearWallet(): Promise<void> {
+    if (this.web3auth) {
+      try {
+        await this.web3auth.logout();
+      } catch {}
+    }
     await SecureStore.deleteItemAsync(EOA_PRIVATE_KEY_KEY);
     await SecureStore.deleteItemAsync(USERNAME_KEY);
     await SecureStore.deleteItemAsync('remitchain_auth_method');
     await SecureStore.deleteItemAsync(SMART_ADDRESS_KEY);
+    await SecureStore.deleteItemAsync('remitchain_custom_txs');
     this.activeWallet = null;
+    this.cachedKernelClient = null;
+    this.cachedKernelOwner = null;
   }
 
   /**
@@ -159,16 +227,10 @@ class WalletService {
 
         privateKey = result.signer.privateKey as Hex;
 
-        // Save the private key to SecureStore (locked behind biometrics/FaceID if enrolled)
         const storeAuthOptions = await this.getAuthOptions('Secure your restored wallet with biometrics');
         await SecureStore.setItemAsync(EOA_PRIVATE_KEY_KEY, privateKey, storeAuthOptions);
       } catch (err: any) {
-        console.error("Google login failed, falling back to secure local key:", err);
-        if (err?.stack) console.error("Google login error stack:", err.stack);
-        if (err?.cause?.stack) console.error("Google login error cause stack:", err.cause.stack);
-        onProgress?.("Google Login failed, using secure local key...");
-        await new Promise((r) => setTimeout(r, 1200));
-        privateKey = await this.getOrCreatePrivateKey();
+        throw new Error(`Google login failed: ${err?.message || err}`);
       }
     }
 
@@ -339,76 +401,22 @@ class WalletService {
       };
     }
 
-    // Real On-Chain Flow using ZeroDev Kernel Account client and Paymaster
     try {
-      onStatusChange?.("Retrieving device credentials...");
-      const privKey = await SecureStore.getItemAsync(EOA_PRIVATE_KEY_KEY);
-      if (!privKey) throw new Error("Owner private key not found in storage.");
+      if (!isAddress(recipientAddress)) {
+        throw new Error("Invalid recipient address.");
+      }
+      const amountInUnits = parseUnits(amount, 6);
+      if (amountInUnits <= 0n) {
+        throw new Error("Transfer amount must be greater than zero.");
+      }
 
-      const ownerAccount = privateKeyToAccount(privKey as Hex);
-      
-      onStatusChange?.("Connecting to RPC Network...");
-      const rpcUrl = WEB3_CONFIG.BUNDLER_URL(WEB3_CONFIG.ZERODEV_PROJECT_ID);
-      const publicClient = createPublicClient({
-        chain: polygonAmoy,
-        transport: http(rpcUrl),
-      });
-
-      onStatusChange?.("Re-initializing Smart Account...");
-      const entryPoint = getEntryPoint("0.7");
-      const kernelVersion = KERNEL_V3_1;
-
-      const ecdsaValidator = await signerToEcdsaValidator(publicClient, {
-        signer: ownerAccount,
-        entryPoint,
-        kernelVersion,
-      });
-
-      const account = await createKernelAccount(publicClient, {
-        plugins: {
-          sudo: ecdsaValidator,
-        },
-        entryPoint,
-        kernelVersion,
-      });
-
-      onStatusChange?.("Constructing gasless transaction client...");
-      const paymasterClient = createZeroDevPaymasterClient({
-        chain: polygonAmoy,
-        transport: http(rpcUrl),
-      });
-
-      const kernelClient = createKernelAccountClient({
-        account,
-        chain: polygonAmoy,
-        bundlerTransport: http(rpcUrl),
-        paymaster: {
-          getPaymasterData: async (userOperation) => {
-            return paymasterClient.sponsorUserOperation({ userOperation });
-          },
-        },
-      });
+      const kernelClient = await this.getKernelClient(onStatusChange);
 
       onStatusChange?.("Encoding USDC transfer transaction...");
-      // Official Circle USDC Token Address on Polygon Amoy
-      const usdcTokenAddress = "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582";
-      
-      // Convert amount to 6 decimals (USDC standard)
-      const amountInUnits = BigInt(Math.floor(parseFloat(amount) * 1_000_000));
+      const usdcTokenAddress = WEB3_CONFIG.USDC_ADDRESS as Hex;
 
       const transferData = encodeFunctionData({
-        abi: [
-          {
-            name: 'transfer',
-            type: 'function',
-            stateMutability: 'nonpayable',
-            inputs: [
-              { name: 'recipient', type: 'address' },
-              { name: 'amount', type: 'uint256' },
-            ],
-            outputs: [{ name: 'success', type: 'bool' }],
-          },
-        ],
+        abi: ERC20_ABI,
         functionName: 'transfer',
         args: [recipientAddress as Hex, amountInUnits],
       });
@@ -464,94 +472,26 @@ class WalletService {
       };
     }
 
-    // Real On-Chain Batch Flow using ZeroDev Kernel Account client and Paymaster
     try {
-      onStatusChange?.("Retrieving credentials...");
-      const privKey = await SecureStore.getItemAsync(EOA_PRIVATE_KEY_KEY);
-      if (!privKey) throw new Error("Owner private key not found in storage.");
+      if (!isAddress(recipientA) || !isAddress(recipientB)) {
+        throw new Error("Invalid recipient address.");
+      }
+      const amountInUnitsA = parseUnits(amountA.toFixed(6), 6);
+      const amountInUnitsB = parseUnits(amountB.toFixed(6), 6);
 
-      const ownerAccount = privateKeyToAccount(privKey as Hex);
-      
-      onStatusChange?.("Connecting to RPC Network...");
-      const rpcUrl = WEB3_CONFIG.BUNDLER_URL(WEB3_CONFIG.ZERODEV_PROJECT_ID);
-      const publicClient = createPublicClient({
-        chain: polygonAmoy,
-        transport: http(rpcUrl),
-      });
-
-      onStatusChange?.("Re-initializing Smart Account...");
-      const entryPoint = getEntryPoint("0.7");
-      const kernelVersion = KERNEL_V3_1;
-
-      const ecdsaValidator = await signerToEcdsaValidator(publicClient, {
-        signer: ownerAccount,
-        entryPoint,
-        kernelVersion,
-      });
-
-      const account = await createKernelAccount(publicClient, {
-        plugins: {
-          sudo: ecdsaValidator,
-        },
-        entryPoint,
-        kernelVersion,
-      });
-
-      onStatusChange?.("Constructing gasless transaction client...");
-      const paymasterClient = createZeroDevPaymasterClient({
-        chain: polygonAmoy,
-        transport: http(rpcUrl),
-      });
-
-      const kernelClient = createKernelAccountClient({
-        account,
-        chain: polygonAmoy,
-        bundlerTransport: http(rpcUrl),
-        paymaster: {
-          getPaymasterData: async (userOperation) => {
-            return paymasterClient.sponsorUserOperation({ userOperation });
-          },
-        },
-      });
+      const kernelClient = await this.getKernelClient(onStatusChange);
 
       onStatusChange?.("Encoding batched USDC transfer transactions...");
-      // Official Circle USDC Token Address on Polygon Amoy
-      const usdcTokenAddress = "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582";
-      
-      // Convert amounts to 6 decimals (USDC standard)
-      const amountInUnitsA = BigInt(Math.floor(amountA * 1_000_000));
-      const amountInUnitsB = BigInt(Math.floor(amountB * 1_000_000));
+      const usdcTokenAddress = WEB3_CONFIG.USDC_ADDRESS as Hex;
 
       const transferDataA = encodeFunctionData({
-        abi: [
-          {
-            name: 'transfer',
-            type: 'function',
-            stateMutability: 'nonpayable',
-            inputs: [
-              { name: 'recipient', type: 'address' },
-              { name: 'amount', type: 'uint256' },
-            ],
-            outputs: [{ name: 'success', type: 'bool' }],
-          },
-        ],
+        abi: ERC20_ABI,
         functionName: 'transfer',
         args: [recipientA as Hex, amountInUnitsA],
       });
 
       const transferDataB = encodeFunctionData({
-        abi: [
-          {
-            name: 'transfer',
-            type: 'function',
-            stateMutability: 'nonpayable',
-            inputs: [
-              { name: 'recipient', type: 'address' },
-              { name: 'amount', type: 'uint256' },
-            ],
-            outputs: [{ name: 'success', type: 'bool' }],
-          },
-        ],
+        abi: ERC20_ABI,
         functionName: 'transfer',
         args: [recipientB as Hex, amountInUnitsB],
       });
@@ -593,102 +533,94 @@ class WalletService {
     }
 
     try {
-      const rpcUrl = WEB3_CONFIG.BUNDLER_URL(WEB3_CONFIG.ZERODEV_PROJECT_ID);
       const publicClient = createPublicClient({
         chain: polygonAmoy,
-        transport: http(rpcUrl),
+        transport: http(WEB3_CONFIG.PUBLIC_RPC_URL),
       });
 
-      // Official Circle USDC Token Address on Polygon Amoy
-      const usdcAddress = "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582";
-      
+      const usdcAddress = WEB3_CONFIG.USDC_ADDRESS as Hex;
+
       const balance = await publicClient.readContract({
         address: usdcAddress,
-        abi: [
-          {
-            name: 'balanceOf',
-            type: 'function',
-            stateMutability: 'view',
-            inputs: [{ name: 'account', type: 'address' }],
-            outputs: [{ name: 'balance', type: 'uint256' }],
-          },
-        ],
+        abi: ERC20_ABI,
         functionName: 'balanceOf',
         args: [address as Hex],
       }) as bigint;
 
-      // USDC has 6 decimal places on Polygon
-      const formattedBalance = (Number(balance) / 1_000_000).toFixed(2);
-      return formattedBalance;
+      return Number(formatUnits(balance, 6)).toFixed(2);
     } catch (e) {
       console.warn("Failed to fetch live USDC balance:", e);
       return "0.00";
     }
   }
 
+  async createCashOutOrder(
+    boothAddress: string,
+    amount: string,
+    pickupCode: string,
+    ttlSeconds = 86400,
+    onStatusChange?: (status: string) => void
+  ): Promise<{ txHash: string; gasSaved: string }> {
+    const isMock = this.activeWallet?.isSimulated ||
+                   WEB3_CONFIG.ZERODEV_PROJECT_ID.startsWith("00000000") ||
+                   WEB3_CONFIG.REMITTANCE_ESCROW_ADDRESS === "0x0000000000000000000000000000000000000000";
+
+    if (isMock) {
+      onStatusChange?.("Simulated escrow cash-out order...");
+      await new Promise((r) => setTimeout(r, 1500));
+      const mockHash = `0x${Array.from({ length: 64 }, () =>
+        Math.floor(Math.random() * 16).toString(16)
+      ).join('')}`;
+      return { txHash: mockHash, gasSaved: "0.022 POL (~$0.03 USD)" };
+    }
+
+    if (!isAddress(boothAddress)) {
+      throw new Error("Invalid booth address.");
+    }
+    const amountInUnits = parseUnits(amount, 6);
+    if (amountInUnits <= 0n) {
+      throw new Error("Order amount must be greater than zero.");
+    }
+    if (!pickupCode.trim()) {
+      throw new Error("Pickup code is required.");
+    }
+
+    const kernelClient = await this.getKernelClient(onStatusChange);
+    const escrowAddress = WEB3_CONFIG.REMITTANCE_ESCROW_ADDRESS as Hex;
+    const usdcAddress = WEB3_CONFIG.USDC_ADDRESS as Hex;
+    const pickupCodeHash = keccak256(toBytes(pickupCode.trim()));
+
+    onStatusChange?.("Encoding approve + escrow order batch...");
+    const approveData = encodeFunctionData({
+      abi: ERC20_ABI,
+      functionName: 'approve',
+      args: [escrowAddress, amountInUnits],
+    });
+
+    const createOrderData = encodeFunctionData({
+      abi: REMITTANCE_ESCROW_ABI,
+      functionName: 'createOrder',
+      args: [boothAddress as Hex, amountInUnits, pickupCodeHash, BigInt(ttlSeconds)],
+    });
+
+    onStatusChange?.("Signing & sending gasless escrow order...");
+    const txHash = await kernelClient.sendTransaction({
+      calls: [
+        { to: usdcAddress, data: approveData },
+        { to: escrowAddress, data: createOrderData },
+      ],
+    });
+
+    return { txHash, gasSaved: "0.022 POL (~$0.03 USD)" };
+  }
+
   // ─── Yield Vault Integration ─────────────────────────────────────────
   // Contract Address: deployed on Polygon Amoy testnet.
   // On mainnet, swap this for the Aave V3 Pool address.
-  private YIELD_VAULT_ADDRESS = (process.env.EXPO_PUBLIC_YIELD_VAULT_ADDRESS || "0x0000000000000000000000000000000000000000") as Hex;
-  private USDC_ADDRESS = "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582" as Hex;
+  private YIELD_VAULT_ADDRESS = WEB3_CONFIG.YIELD_VAULT_ADDRESS as Hex;
+  private USDC_ADDRESS = WEB3_CONFIG.USDC_ADDRESS as Hex;
 
-  private YIELD_VAULT_ABI = [
-    {
-      name: 'deposit',
-      type: 'function' as const,
-      stateMutability: 'nonpayable' as const,
-      inputs: [{ name: 'amount', type: 'uint256' }],
-      outputs: [],
-    },
-    {
-      name: 'withdraw',
-      type: 'function' as const,
-      stateMutability: 'nonpayable' as const,
-      inputs: [{ name: 'amount', type: 'uint256' }],
-      outputs: [],
-    },
-    {
-      name: 'balanceOf',
-      type: 'function' as const,
-      stateMutability: 'view' as const,
-      inputs: [{ name: 'user', type: 'address' }],
-      outputs: [{ name: '', type: 'uint256' }],
-    },
-    {
-      name: 'principalOf',
-      type: 'function' as const,
-      stateMutability: 'view' as const,
-      inputs: [{ name: 'user', type: 'address' }],
-      outputs: [{ name: '', type: 'uint256' }],
-    },
-    {
-      name: 'interestOf',
-      type: 'function' as const,
-      stateMutability: 'view' as const,
-      inputs: [{ name: 'user', type: 'address' }],
-      outputs: [{ name: '', type: 'uint256' }],
-    },
-    {
-      name: 'apyBps',
-      type: 'function' as const,
-      stateMutability: 'view' as const,
-      inputs: [],
-      outputs: [{ name: '', type: 'uint256' }],
-    },
-  ] as const;
-
-  private ERC20_APPROVE_ABI = [
-    {
-      name: 'approve',
-      type: 'function' as const,
-      stateMutability: 'nonpayable' as const,
-      inputs: [
-        { name: 'spender', type: 'address' },
-        { name: 'amount', type: 'uint256' },
-      ],
-      outputs: [{ name: 'success', type: 'bool' }],
-    },
-  ] as const;
+  private YIELD_VAULT_ABI = YIELD_VAULT_ABI;
 
   /**
    * Deposit USDC into the on-chain YieldVault.
@@ -711,57 +643,15 @@ class WalletService {
     }
 
     try {
-      onStatusChange?.("Retrieving credentials...");
-      const privKey = await SecureStore.getItemAsync(EOA_PRIVATE_KEY_KEY);
-      if (!privKey) throw new Error("Owner private key not found.");
+      const amountInUnits = parseUnits(amount, 6);
+      if (amountInUnits <= 0n) throw new Error("Deposit amount must be greater than zero.");
 
-      const ownerAccount = privateKeyToAccount(privKey as Hex);
-
-      onStatusChange?.("Connecting to Polygon Amoy...");
-      const rpcUrl = WEB3_CONFIG.BUNDLER_URL(WEB3_CONFIG.ZERODEV_PROJECT_ID);
-      const publicClient = createPublicClient({
-        chain: polygonAmoy,
-        transport: http(rpcUrl),
-      });
-
-      onStatusChange?.("Initializing Smart Account...");
-      const entryPoint = getEntryPoint("0.7");
-      const kernelVersion = KERNEL_V3_1;
-
-      const ecdsaValidator = await signerToEcdsaValidator(publicClient, {
-        signer: ownerAccount,
-        entryPoint,
-        kernelVersion,
-      });
-
-      const account = await createKernelAccount(publicClient, {
-        plugins: { sudo: ecdsaValidator },
-        entryPoint,
-        kernelVersion,
-      });
-
-      onStatusChange?.("Setting up gasless paymaster...");
-      const paymasterClient = createZeroDevPaymasterClient({
-        chain: polygonAmoy,
-        transport: http(rpcUrl),
-      });
-
-      const kernelClient = createKernelAccountClient({
-        account,
-        chain: polygonAmoy,
-        bundlerTransport: http(rpcUrl),
-        paymaster: {
-          getPaymasterData: async (userOperation) => {
-            return paymasterClient.sponsorUserOperation({ userOperation });
-          },
-        },
-      });
+      const kernelClient = await this.getKernelClient(onStatusChange);
 
       onStatusChange?.("Encoding approve + deposit batch...");
-      const amountInUnits = BigInt(Math.floor(parseFloat(amount) * 1_000_000));
 
       const approveData = encodeFunctionData({
-        abi: this.ERC20_APPROVE_ABI,
+        abi: ERC20_ABI,
         functionName: 'approve',
         args: [this.YIELD_VAULT_ADDRESS, amountInUnits],
       });
@@ -807,57 +697,12 @@ class WalletService {
     }
 
     try {
-      onStatusChange?.("Retrieving credentials...");
-      const privKey = await SecureStore.getItemAsync(EOA_PRIVATE_KEY_KEY);
-      if (!privKey) throw new Error("Owner private key not found.");
-
-      const ownerAccount = privateKeyToAccount(privKey as Hex);
-
-      onStatusChange?.("Connecting to Polygon Amoy...");
-      const rpcUrl = WEB3_CONFIG.BUNDLER_URL(WEB3_CONFIG.ZERODEV_PROJECT_ID);
-      const publicClient = createPublicClient({
-        chain: polygonAmoy,
-        transport: http(rpcUrl),
-      });
-
-      onStatusChange?.("Initializing Smart Account...");
-      const entryPoint = getEntryPoint("0.7");
-      const kernelVersion = KERNEL_V3_1;
-
-      const ecdsaValidator = await signerToEcdsaValidator(publicClient, {
-        signer: ownerAccount,
-        entryPoint,
-        kernelVersion,
-      });
-
-      const account = await createKernelAccount(publicClient, {
-        plugins: { sudo: ecdsaValidator },
-        entryPoint,
-        kernelVersion,
-      });
-
-      onStatusChange?.("Setting up gasless paymaster...");
-      const paymasterClient = createZeroDevPaymasterClient({
-        chain: polygonAmoy,
-        transport: http(rpcUrl),
-      });
-
-      const kernelClient = createKernelAccountClient({
-        account,
-        chain: polygonAmoy,
-        bundlerTransport: http(rpcUrl),
-        paymaster: {
-          getPaymasterData: async (userOperation) => {
-            return paymasterClient.sponsorUserOperation({ userOperation });
-          },
-        },
-      });
+      const kernelClient = await this.getKernelClient(onStatusChange);
 
       onStatusChange?.("Encoding withdrawal transaction...");
-      // Use max uint256 for full withdrawal, otherwise use specified amount
       const amountInUnits = amount === 'MAX'
         ? BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
-        : BigInt(Math.floor(parseFloat(amount) * 1_000_000));
+        : parseUnits(amount, 6);
 
       const withdrawData = encodeFunctionData({
         abi: this.YIELD_VAULT_ABI,
