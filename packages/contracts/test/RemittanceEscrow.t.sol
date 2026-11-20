@@ -12,6 +12,7 @@ contract RemittanceEscrowTest is Test {
     RemittanceEscrow escrow;
     address sender = address(0x1111);
     address booth = address(0x2222);
+    address otherBooth = address(0x3333);
 
     function setUp() public {
         usdc = new MockUSDC();
@@ -49,5 +50,32 @@ contract RemittanceEscrowTest is Test {
         vm.prank(sender);
         escrow.refundExpiredOrder(orderId);
         assertEq(usdc.balanceOf(sender), 500 * 10 ** 6);
+    }
+
+    function test_RevertWrongPickupCodeOrWrongBooth() public {
+        bytes32 codeHash = keccak256(abi.encodePacked("REMIT-8821"));
+        vm.prank(sender);
+        uint256 orderId = escrow.createOrder(booth, 100 * 10 ** 6, codeHash, 1 days);
+
+        vm.prank(otherBooth);
+        vm.expectRevert("Not assigned booth");
+        escrow.claimOrder(orderId, "REMIT-8821");
+
+        vm.prank(booth);
+        vm.expectRevert("Invalid pickup code");
+        escrow.claimOrder(orderId, "WRONG-CODE");
+    }
+
+    function test_RevertUnapprovedBoothAndEarlyRefund() public {
+        bytes32 codeHash = keccak256(abi.encodePacked("REMIT-8821"));
+        vm.prank(sender);
+        vm.expectRevert("Booth not approved");
+        escrow.createOrder(otherBooth, 100 * 10 ** 6, codeHash, 1 days);
+
+        vm.prank(sender);
+        uint256 orderId = escrow.createOrder(booth, 100 * 10 ** 6, codeHash, 1 days);
+        vm.prank(sender);
+        vm.expectRevert("Order not expired");
+        escrow.refundExpiredOrder(orderId);
     }
 }

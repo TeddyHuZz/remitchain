@@ -30,4 +30,39 @@ contract YieldVaultTest is Test {
         vault.withdraw(type(uint256).max);
         assertEq(usdc.balanceOf(user), 1_050 * 10 ** 6);
     }
+
+    function test_PartialWithdrawDeductsInterestFirst() public {
+        vm.prank(user);
+        vault.deposit(1_000 * 10 ** 6);
+
+        vm.warp(block.timestamp + 365 days);
+        vm.prank(user);
+        vault.withdraw(20 * 10 ** 6);
+
+        assertEq(vault.principalOf(user), 1_000 * 10 ** 6);
+        assertEq(vault.interestOf(user), 30 * 10 ** 6);
+    }
+
+    function test_RevertZeroDepositAndNonOwnerSetAPY() public {
+        vm.prank(user);
+        vm.expectRevert("YieldVault: zero amount");
+        vault.deposit(0);
+
+        vm.prank(user);
+        vm.expectRevert();
+        vault.setAPY(600);
+    }
+
+    function test_RevertWithdrawWhenReservesInsufficient() public {
+        YieldVault emptyVault = new YieldVault(address(usdc), 500);
+        vm.prank(user);
+        usdc.approve(address(emptyVault), type(uint256).max);
+        vm.prank(user);
+        emptyVault.deposit(1_000 * 10 ** 6);
+
+        vm.warp(block.timestamp + 365 days);
+        vm.prank(user);
+        vm.expectRevert("YieldVault: insufficient reserves");
+        emptyVault.withdraw(type(uint256).max);
+    }
 }

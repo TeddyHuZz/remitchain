@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse } from "next/server.js";
 import { verifyMessage, isAddress } from "viem";
 
 export async function POST(request: Request) {

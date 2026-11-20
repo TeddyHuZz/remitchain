@@ -45,4 +45,26 @@ contract BoothRegistryTest is Test {
         assertEq(usdc.balanceOf(vendor), 100 * 10 ** 6);
         assertEq(registry.getBoothAddresses().length, 0);
     }
+
+    function test_RevertInsufficientCollateral() public {
+        vm.prank(vendor);
+        vm.expectRevert("Insufficient collateral stake");
+        registry.applyForBooth("QmTest1", 9 * 10 ** 6);
+    }
+
+    function test_RevertDuplicatePendingApplication() public {
+        vm.prank(vendor);
+        registry.applyForBooth("QmTest1", 10 * 10 ** 6);
+        vm.prank(vendor);
+        vm.expectRevert("Application already exists");
+        registry.applyForBooth("QmTest2", 10 * 10 ** 6);
+    }
+
+    function test_RevertNonOwnerReview() public {
+        vm.prank(vendor);
+        registry.applyForBooth("QmTest1", 10 * 10 ** 6);
+        vm.prank(vendor);
+        vm.expectRevert();
+        registry.reviewBooth(vendor, BoothRegistry.Status.Approved);
+    }
 }
