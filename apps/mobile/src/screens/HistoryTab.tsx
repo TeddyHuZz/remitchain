@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,7 +8,11 @@ import {
   Linking,
   Platform,
   Clipboard,
+  ActivityIndicator,
 } from 'react-native';
+import { createPublicClient, http, parseAbiItem, formatUnits } from 'viem';
+import { polygonAmoy } from 'viem/chains';
+import { WEB3_CONFIG } from '../config/env';
 
 export interface TxItem {
   id: string;
@@ -25,10 +29,79 @@ const DEFAULT_TX_HISTORY: TxItem[] = [];
 
 interface HistoryTabProps {
   customTxs: TxItem[];
+  smartAccountAddress?: string;
+  isSimulated?: boolean;
 }
 
-export default function HistoryTab({ customTxs }: HistoryTabProps) {
-  const allTxs = [...customTxs, ...DEFAULT_TX_HISTORY];
+export default function HistoryTab({ customTxs, smartAccountAddress, isSimulated }: HistoryTabProps) {
+  const [onChainTxs, setOnChainTxs] = useState<TxItem[]>([]);
+  const [loadingOnChain, setLoadingOnChain] = useState(false);
+
+  useEffect(() => {
+    const loadOnChainHistory = async () => {
+      if (!smartAccountAddress || isSimulated || WEB3_CONFIG.ZERODEV_PROJECT_ID.startsWith("00000000")) {
+        return;
+      }
+      setLoadingOnChain(true);
+      try {
+        const publicClient = createPublicClient({
+          chain: polygonAmoy,
+          transport: http(WEB3_CONFIG.PUBLIC_RPC_URL),
+        });
+        const latestBlock = await publicClient.getBlockNumber();
+        const fromBlock = latestBlock > 50000n ? latestBlock - 50000n : 0n;
+        const transferEvent = parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)');
+
+        const [incoming, outgoing] = await Promise.all([
+          publicClient.getLogs({
+            address: WEB3_CONFIG.USDC_ADDRESS as `0x${string}`,
+            event: transferEvent,
+            args: { to: smartAccountAddress as `0x${string}` },
+            fromBlock,
+            toBlock: latestBlock,
+          }),
+          publicClient.getLogs({
+            address: WEB3_CONFIG.USDC_ADDRESS as `0x${string}`,
+            event: transferEvent,
+            args: { from: smartAccountAddress as `0x${string}` },
+            fromBlock,
+            toBlock: latestBlock,
+          }),
+        ]);
+
+        const mapped: TxItem[] = [
+          ...incoming.map((log) => ({
+            id: `${log.transactionHash}-in-${log.logIndex}`,
+            type: 'receive' as const,
+            amount: Number(formatUnits(log.args.value ?? 0n, 6)).toFixed(2),
+            recipientOrSender: log.args.from ?? 'Unknown',
+            timestamp: `Block #${log.blockNumber?.toString() ?? ''}`,
+            status: 'success' as const,
+            hash: log.transactionHash ?? '',
+          })),
+          ...outgoing.map((log) => ({
+            id: `${log.transactionHash}-out-${log.logIndex}`,
+            type: 'send' as const,
+            amount: Number(formatUnits(log.args.value ?? 0n, 6)).toFixed(2),
+            recipientOrSender: log.args.to ?? 'Unknown',
+            timestamp: `Block #${log.blockNumber?.toString() ?? ''}`,
+            status: 'success' as const,
+            hash: log.transactionHash ?? '',
+          })),
+        ];
+        setOnChainTxs(mapped.reverse());
+      } catch (e) {
+        console.warn("Failed to fetch on-chain Transfer logs:", e);
+      } finally {
+        setLoadingOnChain(false);
+      }
+    };
+    loadOnChainHistory();
+  }, [smartAccountAddress, isSimulated]);
+
+  const knownHashes = new Set(customTxs.map((tx) => tx.hash.toLowerCase()));
+  const uniqueOnChain = onChainTxs.filter((tx) => !knownHashes.has(tx.hash.toLowerCase()));
+  const allTxs = [...customTxs, ...uniqueOnChain, ...DEFAULT_TX_HISTORY];
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [copiedHashId, setCopiedHashId] = useState<string | null>(null);
 

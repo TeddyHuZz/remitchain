@@ -39,10 +39,11 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
   const [isSending, setIsSending] = useState(false);
   const [txProgress, setTxProgress] = useState('');
   
-  // Split Remittance inputs
   const [isSplit, setIsSplit] = useState(false);
+  const [isCashOut, setIsCashOut] = useState(false);
+  const [pickupCode, setPickupCode] = useState('');
   const [savingsRecipient, setSavingsRecipient] = useState('');
-  const [splitRatio, setSplitRatio] = useState(80); // percentage to Family, rest is savings (100 - ratio)
+  const [splitRatio, setSplitRatio] = useState(80);
 
   const [recentTx, setRecentTx] = useState<{
     hash: string;
@@ -50,6 +51,8 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
     amount: string;
     recipient: string;
     isSplit?: boolean;
+    splitRatio?: number;
+    pickupCode?: string;
     recipientSavings?: string;
     amountFamily?: string;
     amountSavings?: string;
@@ -113,9 +116,46 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
 
 
   const handleSelectBooth = (boothAddress: string) => {
+    const generatedCode = `REMIT-${Math.floor(1000 + Math.random() * 9000)}`;
     setRecipient(boothAddress);
+    setIsSplit(false);
+    setIsCashOut(true);
+    setPickupCode(generatedCode);
     setActiveTab('dashboard');
-    Alert.alert("Booth Selected", "Recipient address has been pre-filled with the booth's Smart Account.");
+    Alert.alert("Booth Selected", `Cash-out mode enabled with pickup code ${generatedCode}.`);
+  };
+
+  const handleClaimFaucet = async () => {
+    setIsRefreshing(true);
+    try {
+      const res = await walletService.claimMockUsdcFaucet();
+      const faucetTx: TxItem = {
+        id: Date.now().toString(),
+        type: 'faucet',
+        amount: '1000.00',
+        recipientOrSender: wallet.smartAccountAddress,
+        timestamp: new Date().toLocaleString([], {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        status: 'success',
+        hash: res.txHash,
+        gasSaved: res.gasSaved,
+      };
+      const updatedTxs = [faucetTx, ...customTxs];
+      setCustomTxs(updatedTxs);
+      await SecureStore.setItemAsync('remitchain_custom_txs', JSON.stringify(updatedTxs)).catch(() => {});
+      await fetchBalance();
+      Alert.alert("Faucet Claimed", "1,000 MockUSDC minted to your Smart Account.");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Faucet claim failed.";
+      Alert.alert("Error", msg);
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const handleSendTransfer = async () => {
@@ -130,6 +170,10 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
     }
     if (isSplit && !isAddress(savingsRecipient.trim())) {
       Alert.alert("Error", "Please enter a valid 0x savings address.");
+      return;
+    }
+    if (isCashOut && !pickupCode.trim()) {
+      Alert.alert("Error", "Please enter a pickup code for the merchant cash-out.");
       return;
     }
 
@@ -178,11 +222,46 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
           amount: amount.trim(),
           recipient: recipient.trim(),
           isSplit: true,
+          splitRatio: pctFamily,
           recipientSavings: savingsRecipient.trim(),
           amountFamily,
           amountSavings,
         });
 
+      } else if (isCashOut) {
+        result = await walletService.createCashOutOrder(
+          recipient.trim(),
+          amount.trim(),
+          pickupCode.trim(),
+          86400,
+          (status) => setTxProgress(status)
+        );
+
+        savedTx = {
+          id: Date.now().toString(),
+          type: 'send',
+          amount: amount.trim(),
+          recipientOrSender: `Booth Escrow (${pickupCode.trim()})`,
+          timestamp: new Date().toLocaleString([], {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          status: 'success',
+          hash: result.txHash,
+          gasSaved: result.gasSaved,
+        };
+
+        setRecentTx({
+          hash: result.txHash,
+          saved: result.gasSaved,
+          amount: amount.trim(),
+          recipient: recipient.trim(),
+          isSplit: false,
+          pickupCode: pickupCode.trim(),
+        });
       } else {
         result = await walletService.simulateGaslessTransfer(
           recipient.trim(),
@@ -245,7 +324,13 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
           />
         );
       case 'history':
-        return <HistoryTab customTxs={customTxs} />;
+        return (
+          <HistoryTab
+            customTxs={customTxs}
+            smartAccountAddress={wallet.smartAccountAddress}
+            isSimulated={wallet.isSimulated}
+          />
+        );
       case 'yield':
         return (
           <YieldTab
@@ -302,13 +387,18 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
             <View style={styles.balanceContainer}>
               <View style={styles.balanceHeader}>
                 <Text style={styles.balanceLabel}>Account Balance</Text>
-                <TouchableOpacity onPress={fetchBalance} disabled={isRefreshing} style={styles.refreshButton} activeOpacity={0.7}>
-                  {isRefreshing ? (
-                    <ActivityIndicator size="small" color="#818CF8" />
-                  ) : (
-                    <Text style={styles.refreshButtonText}>↻ Refresh</Text>
-                  )}
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <TouchableOpacity onPress={handleClaimFaucet} disabled={isRefreshing} style={styles.refreshButton} activeOpacity={0.7}>
+                    <Text style={styles.refreshButtonText}>⚡ Faucet</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={fetchBalance} disabled={isRefreshing} style={styles.refreshButton} activeOpacity={0.7}>
+                    {isRefreshing ? (
+                      <ActivityIndicator size="small" color="#818CF8" />
+                    ) : (
+                      <Text style={styles.refreshButtonText}>↻ Refresh</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
               <View style={styles.balanceBody}>
                 <Text style={styles.balanceAmount}>
@@ -341,24 +431,36 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
                 Send USDC to a family member or booth. Zero gas fees will be charged to you.
               </Text>
 
-              {/* Segmented Toggle Control */}
               <View style={styles.splitToggleContainer}>
                 <TouchableOpacity 
-                  style={[styles.splitToggleButton, !isSplit && styles.splitToggleButtonActive]}
-                  onPress={() => setIsSplit(false)}
+                  style={[styles.splitToggleButton, !isSplit && !isCashOut && styles.splitToggleButtonActive]}
+                  onPress={() => { setIsSplit(false); setIsCashOut(false); }}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.splitToggleText, !isSplit && styles.splitToggleTextActive]}>
-                    Single Recipient
+                  <Text style={[styles.splitToggleText, !isSplit && !isCashOut && styles.splitToggleTextActive]}>
+                    Single
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
                   style={[styles.splitToggleButton, isSplit && styles.splitToggleButtonActive]}
-                  onPress={() => setIsSplit(true)}
+                  onPress={() => { setIsSplit(true); setIsCashOut(false); }}
                   activeOpacity={0.7}
                 >
                   <Text style={[styles.splitToggleText, isSplit && styles.splitToggleTextActive]}>
-                    Split Distribution
+                    Split
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.splitToggleButton, isCashOut && styles.splitToggleButtonActive]}
+                  onPress={() => {
+                    setIsSplit(false);
+                    setIsCashOut(true);
+                    if (!pickupCode) setPickupCode(`REMIT-${Math.floor(1000 + Math.random() * 9000)}`);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.splitToggleText, isCashOut && styles.splitToggleTextActive]}>
+                    Cash-Out
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -371,14 +473,26 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
               ) : (
                 <View>
                   {!isSplit ? (
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Recipient Smart Wallet Address"
-                      placeholderTextColor="#64748B"
-                      value={recipient}
-                      onChangeText={setRecipient}
-                      autoCapitalize="none"
-                    />
+                    <View>
+                      <TextInput
+                        style={styles.input}
+                        placeholder={isCashOut ? "Approved Booth Address (0x...)" : "Recipient Smart Wallet Address"}
+                        placeholderTextColor="#64748B"
+                        value={recipient}
+                        onChangeText={setRecipient}
+                        autoCapitalize="none"
+                      />
+                      {isCashOut && (
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Pickup Code (e.g. REMIT-8821)"
+                          placeholderTextColor="#64748B"
+                          value={pickupCode}
+                          onChangeText={setPickupCode}
+                          autoCapitalize="characters"
+                        />
+                      )}
+                    </View>
                   ) : (
                     <View style={styles.splitInputGroup}>
                       <TextInput
@@ -456,7 +570,7 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
 
                   <TouchableOpacity style={styles.sendButton} onPress={handleSendTransfer} activeOpacity={0.8}>
                     <Text style={styles.sendButtonText}>
-                      {isSplit ? "Send Split Remittance" : "Send Gasless USDC"}
+                      {isSplit ? "Send Split Remittance" : isCashOut ? "Lock USDC in Booth Escrow" : "Send Gasless USDC"}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -556,7 +670,7 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
               {recentTx.isSplit ? (
                 <View style={styles.modalDetails}>
                   <View style={styles.modalDetailRow}>
-                    <Text style={styles.modalDetailLabel}>To Family ({splitRatio}%)</Text>
+                    <Text style={styles.modalDetailLabel}>To Family ({recentTx.splitRatio ?? splitRatio}%)</Text>
                     <Text style={styles.modalDetailValue} numberOfLines={1} ellipsizeMode="middle">
                       {recentTx.recipient}
                     </Text>
@@ -564,7 +678,7 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
                   <Text style={styles.modalSplitSubText}>Amount: ${recentTx.amountFamily} USDC</Text>
 
                   <View style={styles.modalDetailRow}>
-                    <Text style={styles.modalDetailLabel}>To Savings ({100 - splitRatio}%)</Text>
+                    <Text style={styles.modalDetailLabel}>To Savings ({100 - (recentTx.splitRatio ?? splitRatio)}%)</Text>
                     <Text style={styles.modalDetailValue} numberOfLines={1} ellipsizeMode="middle">
                       {recentTx.recipientSavings}
                     </Text>
@@ -591,6 +705,13 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
                       {recentTx.recipient}
                     </Text>
                   </View>
+
+                  {recentTx.pickupCode && (
+                    <View style={styles.modalDetailRow}>
+                      <Text style={styles.modalDetailLabel}>Pickup Code</Text>
+                      <Text style={styles.modalDetailValue}>{recentTx.pickupCode}</Text>
+                    </View>
+                  )}
 
                   <View style={styles.modalDetailRow}>
                     <Text style={styles.modalDetailLabel}>Status</Text>

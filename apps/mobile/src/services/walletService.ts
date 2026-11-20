@@ -614,6 +614,32 @@ class WalletService {
     return { txHash, gasSaved: "0.022 POL (~$0.03 USD)" };
   }
 
+  async claimMockUsdcFaucet(onStatusChange?: (status: string) => void): Promise<{ txHash: string; gasSaved: string }> {
+    const isMock = this.activeWallet?.isSimulated || WEB3_CONFIG.ZERODEV_PROJECT_ID.startsWith("00000000");
+    if (isMock) {
+      onStatusChange?.("Simulated MockUSDC faucet claim...");
+      await new Promise((r) => setTimeout(r, 1200));
+      const mockHash = `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
+      return { txHash: mockHash, gasSaved: "0.012 POL (~$0.01 USD)" };
+    }
+
+    const kernelClient = await this.getKernelClient(onStatusChange);
+    onStatusChange?.("Encoding MockUSDC faucet call...");
+    const faucetData = encodeFunctionData({
+      abi: [{ type: 'function', name: 'faucet', stateMutability: 'nonpayable', inputs: [], outputs: [] }],
+      functionName: 'faucet',
+      args: [],
+    });
+
+    onStatusChange?.("Claiming 1,000 MockUSDC...");
+    const txHash = await kernelClient.sendTransaction({
+      to: WEB3_CONFIG.USDC_ADDRESS as Hex,
+      data: faucetData,
+    });
+
+    return { txHash, gasSaved: "0.012 POL (~$0.01 USD)" };
+  }
+
   // ─── Yield Vault Integration ─────────────────────────────────────────
   // Contract Address: deployed on Polygon Amoy testnet.
   // On mainnet, swap this for the Aave V3 Pool address.
