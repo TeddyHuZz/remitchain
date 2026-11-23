@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server.js";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { getDb } from "../../../../lib/db.ts";
+import { captureError } from "../../../../lib/sentry.ts";
 
 function verifyAlchemySignature(rawBody: string, signature: string | null, signingKey: string): boolean {
   if (!signature) return false;
@@ -50,10 +51,28 @@ export async function POST(request: Request) {
         ON CONFLICT (id) DO NOTHING
       `;
       indexed++;
+
+      const tokens = await db`
+        SELECT expo_push_token FROM push_tokens WHERE wallet_address = ${toAddress} LIMIT 1
+      `;
+      const pushToken = tokens[0]?.expo_push_token;
+      if (pushToken) {
+        await fetch("https://exp.host/--/api/v2/push/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: pushToken,
+            title: "Remittance Received",
+            body: `You received $${amountUsdc.toFixed(2)} USDC on RemitChain.`,
+            data: { txHash },
+          }),
+        }).catch(() => {});
+      }
     }
 
     return NextResponse.json({ indexed, configured: true });
   } catch (error: unknown) {
+    await captureError(error, { route: "/api/webhooks/alchemy" });
     const message = error instanceof Error ? error.message : "Webhook processing failed";
     return NextResponse.json({ error: message }, { status: 500 });
   }
