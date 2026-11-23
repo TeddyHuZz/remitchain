@@ -1,31 +1,13 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { createPublicClient, http, formatUnits } from "viem";
 import { polygonAmoy } from "viem/chains";
-import { Loader2, MapPin, DollarSign, X, ZoomIn, ZoomOut, Maximize } from "lucide-react";
+import { BOOTH_REGISTRY_ABI } from "@repo/contracts-sdk";
+import { MapPin, DollarSign, X, ZoomIn, ZoomOut, Maximize, RotateCw } from "lucide-react";
 
-const BOOTH_REGISTRY_ABI = [
-  {
-    name: "getBoothAddresses",
-    type: "function",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "address[]" }]
-  },
-  {
-    name: "booths",
-    type: "function",
-    stateMutability: "view",
-    inputs: [{ name: "", type: "address" }],
-    outputs: [
-      { name: "ipfsHash", type: "string" },
-      { name: "collateral", type: "uint256" },
-      { name: "status", type: "uint8" },
-      { name: "submittedAt", type: "uint256" }
-    ]
-  }
-] as const;
+const GlobeGL = dynamic(() => import("react-globe.gl"), { ssr: false });
 
 interface BoothPoint {
   lat: number;
@@ -39,45 +21,52 @@ interface BoothPoint {
   status: string;
 }
 
+interface CorridorArc {
+  startLat: number;
+  startLng: number;
+  endLat: number;
+  endLng: number;
+  color: [string, string];
+}
+
+const SENDER_HUBS = [
+  { lat: 1.3521, lng: 103.8198 },
+  { lat: 25.2048, lng: 55.2708 },
+  { lat: 37.7749, lng: -122.4194 },
+  { lat: 51.5072, lng: -0.1276 }
+];
+
 export default function Globe() {
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapInstance = useRef<any>(null);
+  const globeContainerRef = useRef<HTMLDivElement>(null);
+  const globeRef = useRef<any>(null);
   const [booths, setBooths] = useState<BoothPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedBooth, setSelectedBooth] = useState<BoothPoint | null>(null);
   const [hoveredBooth, setHoveredBooth] = useState<BoothPoint | null>(null);
   const [filter, setFilter] = useState<"ALL" | "USDC">("ALL");
-  const [leafletLoaded, setLeafletLoaded] = useState(false);
+  const [autoRotate, setAutoRotate] = useState(true);
+  const [dimensions, setDimensions] = useState({ width: 720, height: 440 });
 
   const registryAddress = process.env.NEXT_PUBLIC_BOOTH_REGISTRY_ADDRESS || "0x7bCB577350e600c1372036094f7F7464e54E90b6";
   const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || "https://rpc-amoy.polygon.technology/";
 
-  // Dynamically load Leaflet resources client-side only (avoid SSR window errors)
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    const container = globeContainerRef.current;
+    if (!container) return;
 
-    // Load Leaflet CSS
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-    document.head.appendChild(link);
-
-    // Load Leaflet JS
-    const script = document.createElement("script");
-    script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-    script.async = true;
-    script.onload = () => {
-      setLeafletLoaded(true);
+    const updateSize = () => {
+      const rect = container.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setDimensions({ width: Math.floor(rect.width), height: Math.floor(rect.height) });
+      }
     };
-    document.body.appendChild(script);
 
-    return () => {
-      document.head.removeChild(link);
-      document.body.removeChild(script);
-    };
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(container);
+    return () => observer.disconnect();
   }, []);
 
-  // Load approved booths from smart contract
   useEffect(() => {
     const fetchBooths = async () => {
       try {
@@ -158,85 +147,55 @@ export default function Globe() {
     fetchBooths();
   }, [registryAddress, rpcUrl]);
 
-  // Initialize and update Leaflet Map
   useEffect(() => {
-    if (!leafletLoaded || loading || !mapContainerRef.current) return;
-    const L = (window as any).L;
-    if (!L) return;
+    const controls = globeRef.current?.controls?.();
+    if (!controls) return;
+    controls.autoRotate = autoRotate && !hoveredBooth && !selectedBooth;
+    controls.autoRotateSpeed = 0.65;
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+  }, [autoRotate, hoveredBooth, selectedBooth, loading]);
 
-    if (!mapInstance.current) {
-      // Create map
-      const map = L.map(mapContainerRef.current, {
-        center: [20, 10], // Centered globally
-        zoom: 2,
-        zoomControl: false,
-        attributionControl: false
-      });
+  const displayedBooths = useMemo(
+    () =>
+      booths.filter((b) => {
+        if (filter === "ALL") return true;
+        return b.collateral >= 10;
+      }),
+    [booths, filter]
+  );
 
-      // Add CartoDB Dark Matter base layer
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-        maxZoom: 18,
-        minZoom: 1
-      }).addTo(map);
-
-      mapInstance.current = map;
-    }
-
-    const map = mapInstance.current;
-
-    // Clear existing markers
-    map.eachLayer((layer: any) => {
-      if (layer instanceof L.Marker) {
-        map.removeLayer(layer);
-      }
+  const corridorArcs = useMemo<CorridorArc[]>(() => {
+    return displayedBooths.flatMap((booth, idx) => {
+      const hub = SENDER_HUBS[idx % SENDER_HUBS.length]!;
+      return [
+        {
+          startLat: hub.lat,
+          startLng: hub.lng,
+          endLat: booth.lat,
+          endLng: booth.lng,
+          color: ["#9945FF", "#10B981"]
+        }
+      ];
     });
+  }, [displayedBooths]);
 
-    // Apply filters
-    const displayedBooths = booths.filter(b => {
-      if (filter === "ALL") return true;
-      return b.collateral >= 10;
-    });
-
-    // Add markers
-    displayedBooths.forEach((booth) => {
-      const customIcon = L.divIcon({
-        className: "custom-leaflet-marker",
-        html: `
-          <div style="position: relative; width: 24px; height: 24px;">
-            <div style="position: absolute; left: -4px; top: -4px; width: 18px; height: 18px; border-radius: 50%; background-color: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.4); animation: pulseRing 2s infinite ease-in-out;"></div>
-            <div style="position: absolute; left: 1px; top: 1px; width: 8px; height: 8px; border-radius: 50%; background-color: #10B981; box-shadow: 0 0 8px #10B981, 0 0 16px #10B981; border: 1.5px solid #FFFFFF;"></div>
-          </div>
-        `,
-        iconSize: [24, 24],
-        iconAnchor: [12, 12]
-      });
-
-      const marker = L.marker([booth.lat, booth.lng], { icon: customIcon }).addTo(map);
-
-      marker.on("mouseover", () => {
-        setHoveredBooth(booth);
-      });
-      marker.on("mouseout", () => {
-        setHoveredBooth(null);
-      });
-      marker.on("click", () => {
-        setSelectedBooth(booth);
-      });
-    });
-
-  }, [leafletLoaded, loading, booths, filter]);
-
-  // Custom controller triggers
-  const zoomIn = () => {
-    mapInstance.current?.zoomIn();
-  };
-
-  const zoomOut = () => {
-    mapInstance.current?.zoomOut();
+  const adjustAltitude = (delta: number) => {
+    const globe = globeRef.current;
+    if (!globe) return;
+    const current = globe.pointOfView();
+    const nextAltitude = Math.min(4.0, Math.max(0.6, (current.altitude || 2.2) + delta));
+    globe.pointOfView({ ...current, altitude: nextAltitude }, 450);
   };
 
   const resetView = () => {
-    mapInstance.current?.setView([20, 10], 2);
+    globeRef.current?.pointOfView({ lat: 15, lng: 100, altitude: 2.2 }, 800);
+  };
+
+  const handleBoothClick = (point: object) => {
+    const booth = point as BoothPoint;
+    setSelectedBooth(booth);
+    globeRef.current?.pointOfView({ lat: booth.lat, lng: booth.lng, altitude: 1.35 }, 800);
   };
 
   const totalCollateral = booths.reduce((acc, curr) => acc + curr.collateral, 0);
@@ -256,20 +215,14 @@ export default function Globe() {
       backdropFilter: "blur(12px)",
       color: "#FFFFFF"
     }}>
-      
-      {/* SIDEBAR METRICS PANEL */}
       <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-        
-        {/* Header tabs */}
         <div style={{ display: "flex", gap: "16px", borderBottom: "1px solid rgba(255,255,255,0.06)", paddingBottom: "12px" }}>
           <span style={{ fontSize: "14px", fontWeight: 700, color: "#9945FF", borderBottom: "2px solid #9945FF", paddingBottom: "10px" }}>
             Verified Projects
           </span>
         </div>
 
-        {/* Stats Cards */}
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          
           <div style={{
             backgroundColor: "rgba(153, 69, 255, 0.12)",
             border: "1px solid rgba(153, 69, 255, 0.25)",
@@ -311,17 +264,15 @@ export default function Globe() {
             <span style={{ fontSize: "24px", fontWeight: 800, color: "#FFFFFF" }}>{loading ? "..." : booths.length > 0 ? "2" : "0"}</span>
             <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>Cross-border corridors</span>
           </div>
-
         </div>
 
-        {/* Directory Filters */}
         <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "10px" }}>
           <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
             Map Explorer Filter
           </span>
-          
+
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-            <button 
+            <button
               onClick={() => setFilter("ALL")}
               style={{
                 background: "transparent",
@@ -343,7 +294,7 @@ export default function Globe() {
               <strong>{booths.length}</strong>
             </button>
 
-            <button 
+            <button
               onClick={() => setFilter("USDC")}
               style={{
                 background: "transparent",
@@ -366,13 +317,9 @@ export default function Globe() {
             </button>
           </div>
         </div>
-
       </div>
 
-      {/* MAP EXPLORER DISPLAY AREA */}
       <div style={{ display: "flex", flexDirection: "column", position: "relative", width: "100%", height: "100%" }}>
-        
-        {/* Floating Controls Overlay */}
         <div style={{
           position: "absolute",
           top: "16px",
@@ -382,29 +329,80 @@ export default function Globe() {
           gap: "8px",
           zIndex: 1000
         }}>
-          <button onClick={resetView} style={controlBtnStyle}><Maximize size={14} /></button>
-          <button onClick={zoomIn} style={controlBtnStyle}><ZoomIn size={14} /></button>
-          <button onClick={zoomOut} style={controlBtnStyle}><ZoomOut size={14} /></button>
+          <button
+            onClick={() => setAutoRotate((prev) => !prev)}
+            title={autoRotate ? "Pause rotation" : "Resume rotation"}
+            style={{
+              ...controlBtnStyle,
+              borderColor: autoRotate ? "rgba(153, 69, 255, 0.5)" : "rgba(255, 255, 255, 0.08)",
+              color: autoRotate ? "#B380FF" : "#FFFFFF"
+            }}
+          >
+            <RotateCw size={14} />
+          </button>
+          <button onClick={resetView} title="Reset view" style={controlBtnStyle}><Maximize size={14} /></button>
+          <button onClick={() => adjustAltitude(-0.45)} title="Zoom in" style={controlBtnStyle}><ZoomIn size={14} /></button>
+          <button onClick={() => adjustAltitude(0.45)} title="Zoom out" style={controlBtnStyle}><ZoomOut size={14} /></button>
         </div>
 
-        {/* Map Container */}
-        <div style={{
-          position: "relative",
-          width: "100%",
-          height: "100%",
-          minHeight: "410px",
-          backgroundColor: "#05060b",
-          border: "1px solid rgba(255,255,255,0.04)",
-          borderRadius: "12px",
-          overflow: "hidden"
-        }}>
-          {/* Leaflet container hook */}
-          <div 
-            ref={mapContainerRef} 
-            style={{ width: "100%", height: "100%", minHeight: "410px", background: "#05060b" }} 
+        <div
+          ref={globeContainerRef}
+          style={{
+            position: "relative",
+            width: "100%",
+            height: "100%",
+            minHeight: "440px",
+            backgroundColor: "#05060b",
+            backgroundImage: "radial-gradient(circle at 50% 50%, rgba(153, 69, 255, 0.08) 0%, rgba(5, 6, 11, 1) 75%)",
+            border: "1px solid rgba(255,255,255,0.04)",
+            borderRadius: "12px",
+            overflow: "hidden",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center"
+          }}
+        >
+          <GlobeGL
+            ref={globeRef}
+            width={dimensions.width}
+            height={dimensions.height}
+            backgroundColor="rgba(0,0,0,0)"
+            globeImageUrl="//unpkg.com/three-globe/example/img/earth-night.jpg"
+            bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
+            atmosphereColor="#9945FF"
+            atmosphereAltitude={0.18}
+            showAtmosphere
+            pointsData={displayedBooths}
+            pointLat="lat"
+            pointLng="lng"
+            pointColor={() => "#10B981"}
+            pointAltitude={0.04}
+            pointRadius={0.55}
+            onPointHover={(point) => setHoveredBooth((point as BoothPoint) || null)}
+            onPointClick={handleBoothClick}
+            ringsData={displayedBooths}
+            ringLat="lat"
+            ringLng="lng"
+            ringColor={() => (t: number) => `rgba(16, 185, 129, ${1 - t})`}
+            ringMaxRadius={3.2}
+            ringPropagationSpeed={1.6}
+            ringRepeatPeriod={1200}
+            arcsData={corridorArcs}
+            arcColor="color"
+            arcDashLength={0.45}
+            arcDashGap={0.2}
+            arcDashAnimateTime={2200}
+            arcStroke={0.6}
+            onGlobeReady={() => {
+              const controls = globeRef.current?.controls?.();
+              if (controls) {
+                controls.autoRotate = autoRotate;
+                controls.autoRotateSpeed = 0.65;
+              }
+              globeRef.current?.pointOfView({ lat: 15, lng: 100, altitude: 2.2 }, 0);
+            }}
           />
 
-          {/* Hover Tooltip Overlay */}
           {hoveredBooth && !selectedBooth && (
             <div style={{
               position: "absolute",
@@ -427,7 +425,6 @@ export default function Globe() {
             </div>
           )}
 
-          {/* Detail modal for selected pin */}
           {selectedBooth && (
             <div style={{
               position: "absolute",
@@ -445,7 +442,7 @@ export default function Globe() {
               animation: "scaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
               zIndex: 1002
             }}>
-              <button 
+              <button
                 onClick={() => setSelectedBooth(null)}
                 style={{
                   position: "absolute",
@@ -496,7 +493,7 @@ export default function Globe() {
                   </div>
                 </div>
 
-                <button 
+                <button
                   onClick={() => setSelectedBooth(null)}
                   style={{
                     backgroundColor: "#9945FF",
@@ -518,37 +515,19 @@ export default function Globe() {
               </div>
             </div>
           )}
-
         </div>
       </div>
 
-      {/* Embedded Animations & Leaflet styling overrides */}
       <style>{`
-        @keyframes pulseRing {
-          0% { transform: scale(0.65); opacity: 0; }
-          50% { opacity: 0.8; }
-          100% { transform: scale(1.3); opacity: 0; }
-        }
         @keyframes scaleUp {
           from { opacity: 0; transform: translate(-50%, -46%) scale(0.96); }
           to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
         }
-        .leaflet-grab {
-          cursor: grab !important;
-        }
-        .leaflet-dragging .leaflet-grab {
-          cursor: grabbing !important;
-        }
-        .leaflet-tile {
-          filter: brightness(1.1) contrast(1.1) hue-rotate(220deg) saturate(0.8) !important;
-        }
       `}</style>
-
     </div>
   );
 }
 
-// Button styles
 const controlBtnStyle = {
   backgroundColor: "rgba(14, 17, 32, 0.85)",
   border: "1px solid rgba(255, 255, 255, 0.08)",

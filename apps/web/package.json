@@ -19,6 +19,8 @@
     "next": "16.2.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-globe.gl": "^2.38.0",
+    "three": "^0.187.0",
     "viem": "^2.54.1"
   },
   "devDependencies": {
@@ -27,6 +29,7 @@
     "@types/node": "^22.15.3",
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
+    "@types/three": "^0.187.0",
     "eslint": "^9.39.1",
     "typescript": "5.9.2"
   }
