@@ -26,5 +26,7 @@ export async function captureError(error: unknown, context?: Record<string, unkn
         timestamp: Math.floor(Date.now() / 1000),
       }),
     });
-  } catch {}
+  } catch {
+    return;
+  }
 }

@@ -9,11 +9,6 @@ import {
   Check,
   X,
   SignOut as LogOut,
-  Storefront as Store,
-  MapPin,
-  CurrencyDollar as DollarSign,
-  Envelope as Mail,
-  User,
   Wallet,
   SpinnerGap as Loader2,
   Warning as AlertTriangle
