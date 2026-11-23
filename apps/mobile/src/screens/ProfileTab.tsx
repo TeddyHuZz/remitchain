@@ -6,8 +6,14 @@ import {
   TouchableOpacity,
   Clipboard,
   Platform,
+  Modal,
+  TextInput,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
-import { WalletState } from '../services/walletService';
+import { THEME } from '../config/theme';
+import { backupService } from '../services/backupService';
+import { walletService, WalletState } from '../services/walletService';
 
 interface ProfileTabProps {
   wallet: WalletState;
@@ -16,6 +22,32 @@ interface ProfileTabProps {
 
 export default function ProfileTab({ wallet, onLogout }: ProfileTabProps) {
   const [copiedKey, setCopiedKey] = useState<'smart' | 'eoa' | null>(null);
+  const [showBackupModal, setShowBackupModal] = useState(false);
+  const [backupPassphrase, setBackupPassphrase] = useState('');
+  const [isBackingUp, setIsBackingUp] = useState(false);
+
+  const handleBackupToDrive = async () => {
+    if (backupPassphrase.trim().length < 8) {
+      Alert.alert('Passphrase Required', 'Enter at least 8 characters to encrypt your backup.');
+      return;
+    }
+    setIsBackingUp(true);
+    try {
+      const privKey = await walletService.exportPrivateKeyForBackup();
+      const encrypted = backupService.encrypt(privKey, backupPassphrase.trim());
+      const session = await backupService.authenticateGoogle(wallet.username);
+      const ok = await backupService.uploadBackup(session, encrypted);
+      if (!ok) throw new Error('Drive upload failed.');
+      setShowBackupModal(false);
+      setBackupPassphrase('');
+      Alert.alert('Backup Complete', 'Your AES-256-GCM encrypted wallet backup is saved to Google Drive.');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Backup failed.';
+      Alert.alert('Backup Error', msg);
+    } finally {
+      setIsBackingUp(false);
+    }
+  };
 
   const copyText = (text: string, keyType: 'smart' | 'eoa') => {
     Clipboard.setString(text);
@@ -110,10 +142,76 @@ export default function ProfileTab({ wallet, onLogout }: ProfileTabProps) {
         </View>
       </View>
 
-      {/* Logout */}
+      <TouchableOpacity
+        style={{
+          backgroundColor: THEME.bgElevated,
+          borderColor: THEME.borderActive,
+          borderWidth: 1,
+          borderRadius: 12,
+          paddingVertical: 14,
+          alignItems: 'center',
+          marginBottom: 12,
+        }}
+        onPress={() => setShowBackupModal(true)}
+        activeOpacity={0.8}
+      >
+        <Text style={{ color: THEME.textPrimary, fontSize: 15, fontWeight: '600' }}>
+          Back Up Wallet to Google Drive
+        </Text>
+      </TouchableOpacity>
+
       <TouchableOpacity style={styles.logoutButton} onPress={onLogout} activeOpacity={0.8}>
         <Text style={styles.logoutButtonText}>Sign Out of RemitChain</Text>
       </TouchableOpacity>
+
+      <Modal visible={showBackupModal} transparent animationType="fade" onRequestClose={() => setShowBackupModal(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', padding: 24 }}>
+          <View style={{ backgroundColor: THEME.bgSurface, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: THEME.borderActive }}>
+            <Text style={{ color: THEME.textPrimary, fontSize: 18, fontWeight: '700', marginBottom: 8 }}>
+              Encrypt Wallet Backup
+            </Text>
+            <Text style={{ color: THEME.textSecondary, fontSize: 13, marginBottom: 14 }}>
+              Choose a recovery passphrase (min 8 chars). Your key is encrypted with AES-256-GCM before uploading to Google Drive.
+            </Text>
+            <TextInput
+              style={{
+                backgroundColor: THEME.bgCanvas,
+                borderColor: THEME.borderSubtle,
+                borderWidth: 1,
+                borderRadius: 10,
+                padding: 12,
+                color: THEME.textPrimary,
+                marginBottom: 16,
+              }}
+              placeholder="Recovery passphrase"
+              placeholderTextColor={THEME.textMuted}
+              secureTextEntry
+              value={backupPassphrase}
+              onChangeText={setBackupPassphrase}
+            />
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: THEME.bgElevated, alignItems: 'center' }}
+                onPress={() => setShowBackupModal(false)}
+                disabled={isBackingUp}
+              >
+                <Text style={{ color: THEME.textSecondary, fontWeight: '600' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: THEME.accentPrimary, alignItems: 'center' }}
+                onPress={handleBackupToDrive}
+                disabled={isBackingUp}
+              >
+                {isBackingUp ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Encrypt & Upload</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

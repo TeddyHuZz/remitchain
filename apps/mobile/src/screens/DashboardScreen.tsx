@@ -30,6 +30,7 @@ import {
 } from 'phosphor-react-native';
 import { isAddress } from 'viem';
 import { THEME } from '../config/theme';
+import { registerPushToken } from '../services/pushService';
 import { walletService, WalletState } from '../services/walletService';
 import BoothsTab, { BoothInfo } from './BoothsTab';
 import HistoryTab, { TxItem } from './HistoryTab';
@@ -87,9 +88,9 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
     loadStoredData();
   }, []);
 
-  // Fetch balance when address updates
   useEffect(() => {
     fetchBalance();
+    registerPushToken(wallet.smartAccountAddress).catch(() => {});
   }, [wallet.smartAccountAddress]);
 
   const loadStoredData = async () => {

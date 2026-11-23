@@ -157,6 +157,65 @@ class WalletService {
     return privKey as Hex;
   }
 
+  async exportPrivateKeyForBackup(): Promise<string> {
+    const authOptions = await this.getAuthOptions('Authorize exporting encrypted wallet backup');
+    const privKey = await SecureStore.getItemAsync(EOA_PRIVATE_KEY_KEY, authOptions);
+    if (!privKey) throw new Error('Owner private key not found in storage.');
+    return privKey;
+  }
+
+  async restoreWalletFromKey(username: string, privateKey: Hex): Promise<WalletState> {
+    const authOptions = await this.getAuthOptions('Secure your restored wallet with biometrics');
+    await SecureStore.setItemAsync(EOA_PRIVATE_KEY_KEY, privateKey, authOptions);
+    await SecureStore.setItemAsync(USERNAME_KEY, username);
+    await SecureStore.setItemAsync('remitchain_auth_method', 'google');
+
+    const ownerAccount = privateKeyToAccount(privateKey);
+    const ownerAddress = ownerAccount.address;
+    const isMock = WEB3_CONFIG.ZERODEV_PROJECT_ID.startsWith('00000000');
+
+    let smartAccountAddress: string;
+    let isSimulated = isMock;
+
+    if (isMock) {
+      smartAccountAddress = `0x3a4b${ownerAddress.slice(6, 38)}7f89`;
+    } else {
+      try {
+        const publicClient = createPublicClient({
+          chain: polygonAmoy,
+          transport: http(WEB3_CONFIG.PUBLIC_RPC_URL),
+        });
+        const entryPoint = getEntryPoint('0.7');
+        const ecdsaValidator = await signerToEcdsaValidator(publicClient, {
+          signer: ownerAccount,
+          entryPoint,
+          kernelVersion: KERNEL_V3_1,
+        });
+        const account = await createKernelAccount(publicClient, {
+          plugins: { sudo: ecdsaValidator },
+          entryPoint,
+          kernelVersion: KERNEL_V3_1,
+        });
+        smartAccountAddress = account.address;
+      } catch {
+        smartAccountAddress = `0x7f3e${ownerAddress.slice(6, 38)}9c4d`;
+        isSimulated = true;
+      }
+    }
+
+    await SecureStore.setItemAsync(SMART_ADDRESS_KEY, smartAccountAddress);
+    this.cachedKernelClient = null;
+    this.cachedKernelOwner = null;
+    this.activeWallet = {
+      eoaAddress: ownerAddress,
+      smartAccountAddress,
+      username,
+      isSimulated,
+      isCloudSynced: true,
+    };
+    return this.activeWallet;
+  }
+
   async clearWallet(): Promise<void> {
     if (this.web3auth) {
       try {

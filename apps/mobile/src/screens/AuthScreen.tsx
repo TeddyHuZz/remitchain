@@ -8,16 +8,55 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Hex } from 'viem';
+import { THEME } from '../config/theme';
+import { backupService } from '../services/backupService';
+import { walletService, WalletState } from '../services/walletService';
 
 interface AuthScreenProps {
   onStartSetup: (username: string, loginMethod: 'passkey' | 'google') => void;
+  onRestoreSuccess?: (wallet: WalletState) => void;
 }
 
-export default function AuthScreen({ onStartSetup }: AuthScreenProps) {
+export default function AuthScreen({ onStartSetup, onRestoreSuccess }: AuthScreenProps) {
   const [username, setUsername] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [showRestoreModal, setShowRestoreModal] = useState(false);
+  const [restorePassphrase, setRestorePassphrase] = useState('');
+  const [isRestoring, setIsRestoring] = useState(false);
+
+  const handleRestoreFromDrive = async () => {
+    if (!restorePassphrase.trim()) {
+      Alert.alert('Passphrase Required', 'Enter your backup recovery passphrase.');
+      return;
+    }
+    setIsRestoring(true);
+    try {
+      const label = username.trim() || 'user';
+      const session = await backupService.authenticateGoogle(label);
+      const encrypted = await backupService.downloadBackup(session);
+      if (!encrypted) {
+        throw new Error('No RemitChain backup found in Google Drive.');
+      }
+      const decryptedKey = backupService.decrypt(encrypted, restorePassphrase.trim());
+      if (!decryptedKey.startsWith('0x')) {
+        throw new Error('Decrypted key format is invalid.');
+      }
+      const restoredName = username.trim() || session.email.split('@')[0] || 'User';
+      const walletState = await walletService.restoreWalletFromKey(restoredName, decryptedKey as Hex);
+      setShowRestoreModal(false);
+      setRestorePassphrase('');
+      onRestoreSuccess?.(walletState);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to restore backup.';
+      Alert.alert('Restore Failed', msg);
+    } finally {
+      setIsRestoring(false);
+    }
+  };
 
   const handleBiometricAuth = () => {
     if (!username.trim()) {
@@ -83,7 +122,6 @@ export default function AuthScreen({ onStartSetup }: AuthScreenProps) {
               <View style={styles.dividerLine} />
             </View>
 
-            {/* Google Social Button */}
             <TouchableOpacity
               style={styles.secondaryButton}
               onPress={handleGoogleAuth}
@@ -91,7 +129,66 @@ export default function AuthScreen({ onStartSetup }: AuthScreenProps) {
             >
               <Text style={styles.secondaryButtonText}>Continue with Google</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{ marginTop: 12, paddingVertical: 10, alignItems: 'center' }}
+              onPress={() => setShowRestoreModal(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={{ color: THEME.accentPrimaryHover, fontSize: 13, fontWeight: '600' }}>
+                Restore Encrypted Backup from Google Drive
+              </Text>
+            </TouchableOpacity>
           </View>
+
+          <Modal visible={showRestoreModal} transparent animationType="fade" onRequestClose={() => setShowRestoreModal(false)}>
+            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', padding: 24 }}>
+              <View style={{ backgroundColor: THEME.bgSurface, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: THEME.borderActive }}>
+                <Text style={{ color: THEME.textPrimary, fontSize: 18, fontWeight: '700', marginBottom: 8 }}>
+                  Restore Wallet Backup
+                </Text>
+                <Text style={{ color: THEME.textSecondary, fontSize: 13, marginBottom: 14 }}>
+                  Sign in with Google Drive and enter your recovery passphrase to decrypt your wallet.
+                </Text>
+                <TextInput
+                  style={{
+                    backgroundColor: THEME.bgCanvas,
+                    borderColor: THEME.borderSubtle,
+                    borderWidth: 1,
+                    borderRadius: 10,
+                    padding: 12,
+                    color: THEME.textPrimary,
+                    marginBottom: 16,
+                  }}
+                  placeholder="Recovery passphrase"
+                  placeholderTextColor={THEME.textMuted}
+                  secureTextEntry
+                  value={restorePassphrase}
+                  onChangeText={setRestorePassphrase}
+                />
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <TouchableOpacity
+                    style={{ flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: THEME.bgElevated, alignItems: 'center' }}
+                    onPress={() => setShowRestoreModal(false)}
+                    disabled={isRestoring}
+                  >
+                    <Text style={{ color: THEME.textSecondary, fontWeight: '600' }}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{ flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: THEME.accentPrimary, alignItems: 'center' }}
+                    onPress={handleRestoreFromDrive}
+                    disabled={isRestoring}
+                  >
+                    {isRestoring ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Restore</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
 
           {/* Info footer */}
           <View style={styles.footer}>

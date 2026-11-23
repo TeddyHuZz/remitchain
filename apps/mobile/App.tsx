@@ -12,14 +12,14 @@ import {
   JetBrainsMono_600SemiBold,
 } from '@expo-google-fonts/jetbrains-mono';
 import { THEME } from './src/config/theme';
+import { captureError } from './src/services/sentryService';
 
-
-// Hook unhandled promise rejections to print their stack traces
 if (typeof Promise !== 'undefined') {
   const p = Promise as any;
   const wrapHandler = (original: any, name: string) => {
     return (id: number, error: any) => {
       console.warn(`🔥 [UNHANDLED REJECTION - ${name}]:`, error);
+      captureError(error, { source: name });
       if (error && error.stack) {
         console.warn(error.stack);
       }
@@ -100,7 +100,7 @@ export default function App() {
       )}
 
       {screen === 'auth' && (
-        <AuthScreen onStartSetup={handleStartSetup} />
+        <AuthScreen onStartSetup={handleStartSetup} onRestoreSuccess={handleSetupSuccess} />
       )}
 
       {screen === 'setup' && (
