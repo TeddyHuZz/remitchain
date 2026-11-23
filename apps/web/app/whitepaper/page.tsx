@@ -2,7 +2,16 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, BookOpen, Clock, Shield, Cpu, Network, Percent, ChevronRight } from "lucide-react";
+import {
+  ArrowLeft,
+  BookOpen,
+  Clock,
+  ShieldCheck as Shield,
+  Cpu,
+  Graph as Network,
+  Percent,
+  CaretRight as ChevronRight
+} from "@phosphor-icons/react";
 import styles from "./page.module.css";
 
 export default function Whitepaper() {

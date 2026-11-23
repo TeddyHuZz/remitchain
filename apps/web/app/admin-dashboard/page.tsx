@@ -2,22 +2,22 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { 
-  ArrowLeft, 
-  Lock, 
-  ShieldAlert, 
-  Check, 
-  X, 
-  LogOut, 
-  Store, 
-  MapPin, 
-  DollarSign, 
-  Mail, 
+import {
+  ArrowLeft,
+  Lock,
+  ShieldWarning as ShieldAlert,
+  Check,
+  X,
+  SignOut as LogOut,
+  Storefront as Store,
+  MapPin,
+  CurrencyDollar as DollarSign,
+  Envelope as Mail,
   User,
   Wallet,
-  Loader2,
-  AlertTriangle
-} from "lucide-react";
+  SpinnerGap as Loader2,
+  Warning as AlertTriangle
+} from "@phosphor-icons/react";
 import { createWalletClient, createPublicClient, custom, http, formatUnits } from "viem";
 import { polygonAmoy } from "viem/chains";
 import { toast } from "sonner";

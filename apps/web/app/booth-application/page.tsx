@@ -2,19 +2,19 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { 
-  ArrowLeft, 
-  Store, 
-  Check, 
-  MapPin, 
-  DollarSign, 
-  Mail, 
+import {
+  ArrowLeft,
+  Storefront as Store,
+  Check,
+  MapPin,
+  CurrencyDollar as DollarSign,
+  Envelope as Mail,
   User,
   Wallet,
-  Loader2,
-  AlertTriangle,
+  SpinnerGap as Loader2,
+  Warning as AlertTriangle,
   X
-} from "lucide-react";
+} from "@phosphor-icons/react";
 import { createWalletClient, createPublicClient, custom, http, parseUnits, formatUnits } from "viem";
 import { polygonAmoy } from "viem/chains";
 import { REMITTANCE_ESCROW_ABI } from "@repo/contracts-sdk";

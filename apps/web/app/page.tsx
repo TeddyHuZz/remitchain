@@ -2,23 +2,23 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { 
-  Smartphone, 
-  History as HistoryIcon, 
-  User, 
-  TrendingUp, 
-  Shield, 
-  MapPin, 
-  HelpCircle, 
-  ArrowRight, 
-  Mail, 
-  ChevronDown, 
-  Zap, 
-  DollarSign, 
-  Clock, 
+import {
+  DeviceMobile as Smartphone,
+  ClockCounterClockwise as HistoryIcon,
+  User,
+  TrendUp as TrendingUp,
+  ShieldCheck as Shield,
+  MapPin,
+  Question as HelpCircle,
+  ArrowRight,
+  Envelope as Mail,
+  CaretDown as ChevronDown,
+  Lightning as Zap,
+  CurrencyDollar as DollarSign,
+  Clock,
   Users,
   Check
-} from "lucide-react";
+} from "@phosphor-icons/react";
 import styles from "./page.module.css";
 import Globe from "./components/Globe";
 
