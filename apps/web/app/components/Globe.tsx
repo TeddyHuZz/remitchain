@@ -5,7 +5,18 @@ import dynamic from "next/dynamic";
 import { createPublicClient, http, formatUnits } from "viem";
 import { polygonAmoy } from "viem/chains";
 import { BOOTH_REGISTRY_ABI } from "@repo/contracts-sdk";
-import { MapPin, DollarSign, X, ZoomIn, ZoomOut, Maximize, RotateCw } from "lucide-react";
+import {
+  MapPin,
+  CurrencyDollar,
+  X,
+  MagnifyingGlassPlus,
+  MagnifyingGlassMinus,
+  ArrowsOut,
+  ArrowsClockwise,
+  Storefront
+} from "@phosphor-icons/react";
+import { AnimatePresence, motion } from "motion/react";
+import styles from "./Globe.module.css";
 
 const GlobeGL = dynamic(() => import("react-globe.gl"), { ssr: false });
 
@@ -45,7 +56,7 @@ export default function Globe() {
   const [hoveredBooth, setHoveredBooth] = useState<BoothPoint | null>(null);
   const [filter, setFilter] = useState<"ALL" | "USDC">("ALL");
   const [autoRotate, setAutoRotate] = useState(true);
-  const [dimensions, setDimensions] = useState({ width: 720, height: 440 });
+  const [dimensions, setDimensions] = useState({ width: 720, height: 460 });
 
   const registryAddress = process.env.NEXT_PUBLIC_BOOTH_REGISTRY_ADDRESS || "0x7bCB577350e600c1372036094f7F7464e54E90b6";
   const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || "https://rpc-amoy.polygon.technology/";
@@ -174,7 +185,7 @@ export default function Globe() {
           startLng: hub.lng,
           endLat: booth.lat,
           endLng: booth.lng,
-          color: ["#9945FF", "#10B981"]
+          color: ["#2563EB", "#10B981"]
         }
       ];
     });
@@ -192,8 +203,7 @@ export default function Globe() {
     globeRef.current?.pointOfView({ lat: 15, lng: 100, altitude: 2.2 }, 800);
   };
 
-  const handleBoothClick = (point: object) => {
-    const booth = point as BoothPoint;
+  const focusBooth = (booth: BoothPoint) => {
     setSelectedBooth(booth);
     globeRef.current?.pointOfView({ lat: booth.lat, lng: booth.lng, altitude: 1.35 }, 800);
   };
@@ -201,120 +211,102 @@ export default function Globe() {
   const totalCollateral = booths.reduce((acc, curr) => acc + curr.collateral, 0);
 
   return (
-    <div style={{
-      display: "grid",
-      gridTemplateColumns: "320px 1fr",
-      gap: "24px",
-      width: "100%",
-      maxWidth: "1200px",
-      background: "rgba(10, 15, 30, 0.4)",
-      border: "1px solid rgba(255, 255, 255, 0.05)",
-      borderRadius: "16px",
-      padding: "24px",
-      boxShadow: "0 20px 40px rgba(0,0,0,0.8)",
-      backdropFilter: "blur(12px)",
-      color: "#FFFFFF"
-    }}>
-      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-        <div style={{ display: "flex", gap: "16px", borderBottom: "1px solid rgba(255,255,255,0.06)", paddingBottom: "12px" }}>
-          <span style={{ fontSize: "14px", fontWeight: 700, color: "#9945FF", borderBottom: "2px solid #9945FF", paddingBottom: "10px" }}>
-            Verified Projects
+    <div className={styles.wrapper}>
+      <div className={styles.sidebar}>
+        <div style={{ display: "flex", gap: "16px", borderBottom: "1px solid rgba(255,255,255,0.08)", paddingBottom: "12px" }}>
+          <span style={{ fontSize: "14px", fontWeight: 700, color: "#3B82F6", borderBottom: "2px solid #2563EB", paddingBottom: "10px" }}>
+            Verified Nodes
           </span>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           <div style={{
-            backgroundColor: "rgba(153, 69, 255, 0.12)",
-            border: "1px solid rgba(153, 69, 255, 0.25)",
+            backgroundColor: "rgba(37, 99, 235, 0.12)",
+            border: "1px solid rgba(37, 99, 235, 0.28)",
             borderRadius: "12px",
-            padding: "16px",
+            padding: "14px",
             display: "flex",
             flexDirection: "column",
             gap: "4px"
           }}>
-            <span style={{ fontSize: "11px", fontWeight: 700, color: "#B380FF", textTransform: "uppercase" }}>Total Active Nodes</span>
-            <span style={{ fontSize: "24px", fontWeight: 800, color: "#FFFFFF" }}>{loading ? "..." : booths.length}</span>
-            <span style={{ fontSize: "10px", color: "#10B981" }}>Active Storefronts</span>
+            <span style={{ fontSize: "11px", fontWeight: 700, color: "#93C5FD", textTransform: "uppercase" }}>Total Active Nodes</span>
+            <span className="tabular-nums" style={{ fontSize: "24px", fontWeight: 800, color: "#F8FAFC" }}>{loading ? "..." : booths.length}</span>
+            <span style={{ fontSize: "11px", color: "#10B981" }}>Active Storefronts</span>
           </div>
 
           <div style={{
-            backgroundColor: "rgba(30, 41, 59, 0.35)",
-            border: "1px solid rgba(255, 255, 255, 0.04)",
+            backgroundColor: "#161F30",
+            border: "1px solid rgba(255, 255, 255, 0.08)",
             borderRadius: "12px",
-            padding: "16px",
+            padding: "14px",
             display: "flex",
             flexDirection: "column",
             gap: "4px"
           }}>
-            <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Staked Escrow Volume</span>
-            <span style={{ fontSize: "24px", fontWeight: 800, color: "#FFFFFF" }}>{loading ? "..." : `$${totalCollateral.toLocaleString()}.00 USDC`}</span>
-            <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>Locked Collateral Guarantee</span>
-          </div>
-
-          <div style={{
-            backgroundColor: "rgba(30, 41, 59, 0.35)",
-            border: "1px solid rgba(255, 255, 255, 0.04)",
-            borderRadius: "12px",
-            padding: "16px",
-            display: "flex",
-            flexDirection: "column",
-            gap: "4px"
-          }}>
-            <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Registered Corridors</span>
-            <span style={{ fontSize: "24px", fontWeight: 800, color: "#FFFFFF" }}>{loading ? "..." : booths.length > 0 ? "2" : "0"}</span>
-            <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>Cross-border corridors</span>
+            <span style={{ fontSize: "11px", fontWeight: 700, color: "#94A3B8", textTransform: "uppercase" }}>Staked Escrow Volume</span>
+            <span className="tabular-nums" style={{ fontSize: "22px", fontWeight: 800, color: "#F8FAFC" }}>{loading ? "..." : `$${totalCollateral.toLocaleString()}.00`}</span>
+            <span style={{ fontSize: "11px", color: "#64748B" }}>USDC Collateral Guarantee</span>
           </div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "10px" }}>
-          <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-            Map Explorer Filter
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          <span style={{ fontSize: "11px", fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+            Filter Nodes
           </span>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          <div style={{ display: "flex", gap: "8px" }}>
             <button
               onClick={() => setFilter("ALL")}
               style={{
-                background: "transparent",
-                border: "none",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: "8px 12px",
+                flex: 1,
+                padding: "8px 10px",
                 borderRadius: "8px",
-                fontSize: "13px",
-                color: filter === "ALL" ? "#FFFFFF" : "var(--text-description)",
-                backgroundColor: filter === "ALL" ? "rgba(255,255,255,0.05)" : "transparent",
-                cursor: "pointer",
-                width: "100%",
-                textAlign: "left"
+                fontSize: "12px",
+                fontWeight: 600,
+                border: "1px solid rgba(255,255,255,0.08)",
+                color: filter === "ALL" ? "#F8FAFC" : "#94A3B8",
+                backgroundColor: filter === "ALL" ? "#2563EB" : "#161F30",
+                cursor: "pointer"
               }}
             >
-              <span>● All Registered Nodes</span>
-              <strong>{booths.length}</strong>
+              All ({booths.length})
             </button>
-
             <button
               onClick={() => setFilter("USDC")}
               style={{
-                background: "transparent",
-                border: "none",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: "8px 12px",
+                flex: 1,
+                padding: "8px 10px",
                 borderRadius: "8px",
-                fontSize: "13px",
-                color: filter === "USDC" ? "#FFFFFF" : "var(--text-description)",
-                backgroundColor: filter === "USDC" ? "rgba(255,255,255,0.05)" : "transparent",
-                cursor: "pointer",
-                width: "100%",
-                textAlign: "left"
+                fontSize: "12px",
+                fontWeight: 600,
+                border: "1px solid rgba(255,255,255,0.08)",
+                color: filter === "USDC" ? "#F8FAFC" : "#94A3B8",
+                backgroundColor: filter === "USDC" ? "#2563EB" : "#161F30",
+                cursor: "pointer"
               }}
             >
-              <span>● USDC Escrow (&ge;10 USDC)</span>
-              <strong>{booths.filter(b => b.collateral >= 10).length}</strong>
+              ≥10 USDC ({booths.filter(b => b.collateral >= 10).length})
             </button>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          <span style={{ fontSize: "11px", fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+            Booth Directory
+          </span>
+          <div className={styles.boothList}>
+            {displayedBooths.length === 0 ? (
+              <span style={{ fontSize: "12px", color: "#64748B" }}>{loading ? "Syncing booths..." : "No active booths found."}</span>
+            ) : (
+              displayedBooths.map((b) => (
+                <button key={`${b.name}-${b.coordinates}`} className={styles.boothListItem} onClick={() => focusBooth(b)}>
+                  <span style={{ display: "flex", alignItems: "center", gap: "6px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <Storefront size={14} weight="duotone" color="#10B981" />
+                    {b.name}
+                  </span>
+                  <span className="tabular-nums" style={{ color: "#10B981", fontWeight: 600 }}>${b.collateral}</span>
+                </button>
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -334,15 +326,15 @@ export default function Globe() {
             title={autoRotate ? "Pause rotation" : "Resume rotation"}
             style={{
               ...controlBtnStyle,
-              borderColor: autoRotate ? "rgba(153, 69, 255, 0.5)" : "rgba(255, 255, 255, 0.08)",
-              color: autoRotate ? "#B380FF" : "#FFFFFF"
+              borderColor: autoRotate ? "rgba(37, 99, 235, 0.55)" : "rgba(255, 255, 255, 0.08)",
+              color: autoRotate ? "#3B82F6" : "#F8FAFC"
             }}
           >
-            <RotateCw size={14} />
+            <ArrowsClockwise size={15} weight="bold" />
           </button>
-          <button onClick={resetView} title="Reset view" style={controlBtnStyle}><Maximize size={14} /></button>
-          <button onClick={() => adjustAltitude(-0.45)} title="Zoom in" style={controlBtnStyle}><ZoomIn size={14} /></button>
-          <button onClick={() => adjustAltitude(0.45)} title="Zoom out" style={controlBtnStyle}><ZoomOut size={14} /></button>
+          <button onClick={resetView} title="Reset view" style={controlBtnStyle}><ArrowsOut size={15} /></button>
+          <button onClick={() => adjustAltitude(-0.45)} title="Zoom in" style={controlBtnStyle}><MagnifyingGlassPlus size={15} /></button>
+          <button onClick={() => adjustAltitude(0.45)} title="Zoom out" style={controlBtnStyle}><MagnifyingGlassMinus size={15} /></button>
         </div>
 
         <div
@@ -351,10 +343,10 @@ export default function Globe() {
             position: "relative",
             width: "100%",
             height: "100%",
-            minHeight: "440px",
-            backgroundColor: "#05060b",
-            backgroundImage: "radial-gradient(circle at 50% 50%, rgba(153, 69, 255, 0.08) 0%, rgba(5, 6, 11, 1) 75%)",
-            border: "1px solid rgba(255,255,255,0.04)",
+            minHeight: "460px",
+            backgroundColor: "#06090F",
+            backgroundImage: "radial-gradient(circle at 50% 50%, rgba(37, 99, 235, 0.1) 0%, rgba(6, 9, 15, 1) 75%)",
+            border: "1px solid rgba(255,255,255,0.08)",
             borderRadius: "12px",
             overflow: "hidden",
             display: "flex",
@@ -369,8 +361,8 @@ export default function Globe() {
             backgroundColor="rgba(0,0,0,0)"
             globeImageUrl="//unpkg.com/three-globe/example/img/earth-night.jpg"
             bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
-            atmosphereColor="#9945FF"
-            atmosphereAltitude={0.18}
+            atmosphereColor="#2563EB"
+            atmosphereAltitude={0.16}
             showAtmosphere
             pointsData={displayedBooths}
             pointLat="lat"
@@ -379,7 +371,7 @@ export default function Globe() {
             pointAltitude={0.04}
             pointRadius={0.55}
             onPointHover={(point) => setHoveredBooth((point as BoothPoint) || null)}
-            onPointClick={handleBoothClick}
+            onPointClick={(point) => focusBooth(point as BoothPoint)}
             ringsData={displayedBooths}
             ringLat="lat"
             ringLng="lng"
@@ -403,135 +395,138 @@ export default function Globe() {
             }}
           />
 
-          {hoveredBooth && !selectedBooth && (
-            <div style={{
-              position: "absolute",
-              bottom: "20px",
-              left: "50%",
-              transform: "translateX(-50%)",
-              backgroundColor: "rgba(14, 17, 32, 0.95)",
-              border: "1px solid #9945FF",
-              borderRadius: "8px",
-              padding: "8px 16px",
-              fontSize: "13px",
-              color: "#FFFFFF",
-              boxShadow: "0 10px 20px rgba(0,0,0,0.5)",
-              pointerEvents: "none",
-              zIndex: 1001,
-              whiteSpace: "nowrap"
-            }}>
-              <strong>{hoveredBooth.name}</strong>
-              <span style={{ color: "var(--text-muted)", marginLeft: "8px" }}>Click to view details</span>
-            </div>
-          )}
-
-          {selectedBooth && (
-            <div style={{
-              position: "absolute",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              backgroundColor: "rgba(14, 17, 32, 0.96)",
-              border: "1px solid rgba(153, 69, 255, 0.4)",
-              borderRadius: "16px",
-              padding: "24px",
-              width: "90%",
-              maxWidth: "360px",
-              boxShadow: "0 20px 40px rgba(0,0,0,0.85), 0 0 20px rgba(153, 69, 255, 0.15)",
-              backdropFilter: "blur(12px)",
-              animation: "scaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
-              zIndex: 1002
-            }}>
-              <button
-                onClick={() => setSelectedBooth(null)}
+          <AnimatePresence>
+            {hoveredBooth && !selectedBooth && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                transition={{ duration: 0.18 }}
                 style={{
                   position: "absolute",
-                  top: "16px",
-                  right: "16px",
-                  background: "transparent",
-                  border: "none",
-                  color: "var(--text-description)",
-                  cursor: "pointer",
-                  padding: "4px"
+                  bottom: "20px",
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  backgroundColor: "rgba(13, 19, 31, 0.95)",
+                  border: "1px solid rgba(37, 99, 235, 0.5)",
+                  borderRadius: "8px",
+                  padding: "8px 16px",
+                  fontSize: "13px",
+                  color: "#F8FAFC",
+                  pointerEvents: "none",
+                  zIndex: 1001,
+                  whiteSpace: "nowrap"
                 }}
               >
-                <X size={16} />
-              </button>
+                <strong>{hoveredBooth.name}</strong>
+                <span style={{ color: "#94A3B8", marginLeft: "8px" }}>Click to inspect</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                <div>
-                  <span style={{ fontSize: "10px", fontWeight: 800, color: "#10B981", backgroundColor: "rgba(16, 185, 129, 0.08)", padding: "2px 8px", borderRadius: "10px", textTransform: "uppercase" }}>Active DePIN Node</span>
-                  <h3 style={{ fontSize: "18px", fontWeight: 800, color: "#FFFFFF", marginTop: "8px" }}>{selectedBooth.name}</h3>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: "12px", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "16px" }}>
-                  <div style={{ display: "flex", gap: "10px" }}>
-                    <MapPin size={16} style={{ color: "#9945FF", flexShrink: 0, marginTop: "2px" }} />
-                    <div style={{ display: "flex", flexDirection: "column" }}>
-                      <span style={{ fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase" }}>Address</span>
-                      <span style={{ fontSize: "13px", color: "#FFFFFF", lineHeight: 1.4 }}>{selectedBooth.address}</span>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", gap: "10px" }}>
-                    <DollarSign size={16} style={{ color: "#10B981", flexShrink: 0 }} />
-                    <div style={{ display: "flex", flexDirection: "column" }}>
-                      <span style={{ fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase" }}>Collateral Stake</span>
-                      <span style={{ fontSize: "13px", color: "#FFFFFF", fontWeight: 700 }}>{selectedBooth.collateral} USDC</span>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", borderTop: "1px solid rgba(255,255,255,0.04)", paddingTop: "12px" }}>
-                    <div>
-                      <span style={{ fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase" }}>Operator</span>
-                      <span style={{ fontSize: "13px", color: "#FFFFFF", display: "block" }}>{selectedBooth.owner}</span>
-                    </div>
-                    <div>
-                      <span style={{ fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase" }}>Coordinates</span>
-                      <span style={{ fontSize: "11px", color: "#94A3B8", fontFamily: "monospace", display: "block" }}>{selectedBooth.coordinates}</span>
-                    </div>
-                  </div>
-                </div>
-
+          <AnimatePresence>
+            {selectedBooth && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                style={{
+                  position: "absolute",
+                  top: "50%",
+                  left: "50%",
+                  transform: "translate(-50%, -50%)",
+                  backgroundColor: "rgba(13, 19, 31, 0.96)",
+                  border: "1px solid rgba(255, 255, 255, 0.16)",
+                  borderRadius: "16px",
+                  padding: "24px",
+                  width: "90%",
+                  maxWidth: "360px",
+                  backdropFilter: "blur(12px)",
+                  zIndex: 1002
+                }}
+              >
                 <button
                   onClick={() => setSelectedBooth(null)}
                   style={{
-                    backgroundColor: "#9945FF",
-                    color: "#FFFFFF",
+                    position: "absolute",
+                    top: "16px",
+                    right: "16px",
+                    background: "transparent",
                     border: "none",
-                    borderRadius: "8px",
-                    padding: "10px",
-                    fontWeight: 700,
-                    fontSize: "13px",
+                    color: "#94A3B8",
                     cursor: "pointer",
-                    marginTop: "8px",
-                    transition: "background-color 0.2s"
+                    padding: "4px"
                   }}
-                  onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "#7A22CC")}
-                  onMouseOut={(e) => (e.currentTarget.style.backgroundColor = "#9945FF")}
                 >
-                  Close Inspection
+                  <X size={16} />
                 </button>
-              </div>
-            </div>
-          )}
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                  <div>
+                    <span style={{ fontSize: "10px", fontWeight: 800, color: "#10B981", backgroundColor: "rgba(16, 185, 129, 0.12)", padding: "3px 8px", borderRadius: "10px", textTransform: "uppercase" }}>Active DePIN Node</span>
+                    <h3 style={{ fontSize: "18px", fontWeight: 700, color: "#F8FAFC", marginTop: "8px" }}>{selectedBooth.name}</h3>
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px", borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "16px" }}>
+                    <div style={{ display: "flex", gap: "10px" }}>
+                      <MapPin size={18} weight="duotone" style={{ color: "#3B82F6", flexShrink: 0, marginTop: "2px" }} />
+                      <div style={{ display: "flex", flexDirection: "column" }}>
+                        <span style={{ fontSize: "10px", color: "#64748B", textTransform: "uppercase" }}>Address</span>
+                        <span style={{ fontSize: "13px", color: "#F8FAFC", lineHeight: 1.4 }}>{selectedBooth.address}</span>
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "10px" }}>
+                      <CurrencyDollar size={18} weight="duotone" style={{ color: "#10B981", flexShrink: 0 }} />
+                      <div style={{ display: "flex", flexDirection: "column" }}>
+                        <span style={{ fontSize: "10px", color: "#64748B", textTransform: "uppercase" }}>Collateral Stake</span>
+                        <span className="tabular-nums" style={{ fontSize: "13px", color: "#F8FAFC", fontWeight: 700 }}>{selectedBooth.collateral} USDC</span>
+                      </div>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "12px" }}>
+                      <div>
+                        <span style={{ fontSize: "10px", color: "#64748B", textTransform: "uppercase" }}>Operator</span>
+                        <span style={{ fontSize: "13px", color: "#F8FAFC", display: "block" }}>{selectedBooth.owner}</span>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: "10px", color: "#64748B", textTransform: "uppercase" }}>Coordinates</span>
+                        <span className="tabular-nums" style={{ fontSize: "11px", color: "#94A3B8", display: "block" }}>{selectedBooth.coordinates}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setSelectedBooth(null)}
+                    style={{
+                      backgroundColor: "#2563EB",
+                      color: "#F8FAFC",
+                      border: "none",
+                      borderRadius: "8px",
+                      padding: "10px",
+                      fontWeight: 700,
+                      fontSize: "13px",
+                      cursor: "pointer",
+                      marginTop: "4px"
+                    }}
+                  >
+                    Close Inspection
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
-
-      <style>{`
-        @keyframes scaleUp {
-          from { opacity: 0; transform: translate(-50%, -46%) scale(0.96); }
-          to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-        }
-      `}</style>
     </div>
   );
 }
 
 const controlBtnStyle = {
-  backgroundColor: "rgba(14, 17, 32, 0.85)",
+  backgroundColor: "rgba(13, 19, 31, 0.88)",
   border: "1px solid rgba(255, 255, 255, 0.08)",
-  color: "#FFFFFF",
+  color: "#F8FAFC",
   borderRadius: "8px",
   width: "32px",
   height: "32px",
@@ -539,6 +534,5 @@ const controlBtnStyle = {
   alignItems: "center",
   justifyContent: "center",
   cursor: "pointer",
-  transition: "all 0.2s",
   zIndex: 1000
 };

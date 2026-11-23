@@ -18,6 +18,7 @@ import {
 import { createWalletClient, createPublicClient, custom, http, parseUnits, formatUnits } from "viem";
 import { polygonAmoy } from "viem/chains";
 import { REMITTANCE_ESCROW_ABI } from "@repo/contracts-sdk";
+import { toast } from "sonner";
 import styles from "./page.module.css";
 
 const IERC20_ABI = [
@@ -209,7 +210,7 @@ export default function BoothApplication() {
 
   const connectWallet = async () => {
     if (typeof window === "undefined" || !(window as any).ethereum) {
-      alert("MetaMask or compatible Web3 wallet not detected. Please install a wallet extension to proceed.");
+      toast.error("MetaMask or compatible Web3 wallet not detected.");
       return;
     }
     setIsConnecting(true);
@@ -357,8 +358,8 @@ export default function BoothApplication() {
       setTxStep("Confirming collateral withdrawal on-chain...");
       await publicClient.waitForTransactionReceipt({ hash: txHash });
       
-      setExistingBooth(null); // Return to default application form
-      alert("Application cancelled successfully. Your collateral stake has been returned to your wallet.");
+      setExistingBooth(null);
+      toast.success("Application cancelled. Collateral stake returned to your wallet.");
     } catch (err: any) {
       setFormError(err.message || "Failed to cancel application.");
     } finally {
@@ -369,7 +370,7 @@ export default function BoothApplication() {
 
   const handleVerifyTransfer = () => {
     if (!verificationCode.trim()) {
-      alert("Please enter a customer pickup code.");
+      toast.error("Please enter a customer pickup code.");
       return;
     }
     setShowVerifyModal(true);
@@ -378,11 +379,11 @@ export default function BoothApplication() {
   const confirmVerifyTransfer = async () => {
     const amount = parseFloat(payoutAmountInput);
     if (isNaN(amount) || amount <= 0) {
-      alert("Please enter a valid payout amount.");
+      toast.error("Please enter a valid payout amount.");
       return;
     }
     if (!walletAddress || !escrowAddress || !orderIdInput.trim()) {
-      alert("Connect your booth wallet, configure NEXT_PUBLIC_REMITTANCE_ESCROW_ADDRESS, and enter the Escrow Order ID.");
+      toast.error("Connect your booth wallet, configure NEXT_PUBLIC_REMITTANCE_ESCROW_ADDRESS, and enter the Escrow Order ID.");
       return;
     }
 
@@ -423,7 +424,7 @@ export default function BoothApplication() {
       setShowVerifyModal(false);
       setVerificationCode("");
       setOrderIdInput("");
-      alert(`Code "${verificationCode}" verified on-chain (tx: ${txHash.slice(0, 10)}...).`);
+      toast.success(`Code "${verificationCode}" verified on-chain (tx: ${txHash.slice(0, 10)}...).`);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to claim escrow order on-chain.";
       setFormError(message);
@@ -644,7 +645,7 @@ export default function BoothApplication() {
                       <div style={{ display: "flex", flexDirection: "column", gap: "12px", fontSize: "14px" }}>
                         <div>
                           <span style={{ color: "#94A3B8", display: "block", fontSize: "10px", textTransform: "uppercase" }}>Transaction Pickup Code</span>
-                          <strong style={{ fontSize: "14px", color: "#9945FF", fontFamily: "monospace" }}>{verificationCode}</strong>
+                          <strong className="tabular-nums" style={{ fontSize: "14px", color: "#3B82F6" }}>{verificationCode}</strong>
                         </div>
 
                         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -713,7 +714,7 @@ export default function BoothApplication() {
                         <button 
                           onClick={confirmVerifyTransfer}
                           style={{
-                            backgroundColor: "#9945FF",
+                            backgroundColor: "#2563EB",
                             color: "#FFFFFF",
                             border: "none",
                             borderRadius: "8px",

@@ -12,14 +12,17 @@
     "test": "node --test app/api/ipfs/route.test.ts app/contracts-sdk.test.ts"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
     "@repo/contracts-sdk": "workspace:*",
     "@repo/ui": "workspace:*",
     "@tanstack/react-table": "^8.21.3",
     "lucide-react": "^1.22.0",
+    "motion": "^14.14.0",
     "next": "16.2.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-globe.gl": "^2.38.0",
+    "sonner": "^2.0.8",
     "three": "^0.187.0",
     "viem": "^2.54.1"
   },

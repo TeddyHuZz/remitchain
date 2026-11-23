@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { createWalletClient, createPublicClient, custom, http, formatUnits } from "viem";
 import { polygonAmoy } from "viem/chains";
+import { toast } from "sonner";
 import styles from "./page.module.css";
 
 const BOOTH_REGISTRY_ABI = [
@@ -217,7 +218,7 @@ export default function AdminDashboard() {
 
   const connectWallet = async () => {
     if (typeof window === "undefined" || !(window as any).ethereum) {
-      alert("MetaMask or compatible Web3 wallet not detected. Please install a wallet extension to proceed.");
+      toast.error("MetaMask or compatible Web3 wallet not detected.");
       return;
     }
     setIsConnecting(true);
@@ -319,7 +320,7 @@ export default function AdminDashboard() {
     // Auto-connect if wallet is disconnected
     if (!currentWallet) {
       if (typeof window === "undefined" || !(window as any).ethereum) {
-        alert("MetaMask or compatible Web3 wallet not detected. Please install a wallet extension to proceed.");
+        toast.error("MetaMask or compatible Web3 wallet not detected.");
         return;
       }
       setIsConnecting(true);

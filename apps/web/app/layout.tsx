@@ -1,16 +1,17 @@
 import type { Metadata } from "next";
-import { Inter, Montserrat } from "next/font/google";
+import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
+import { Toaster } from "sonner";
 import "./globals.css";
 
-const inter = Inter({
+const plusJakartaSans = Plus_Jakarta_Sans({
   subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-jakarta",
   display: "swap",
 });
 
-const montserrat = Montserrat({
+const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
-  variable: "--font-montserrat",
+  variable: "--font-jetbrains",
   display: "swap",
 });
 
@@ -25,9 +26,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${montserrat.variable}`}>
+    <html lang="en" className={`${plusJakartaSans.variable} ${jetbrainsMono.variable}`}>
       <body>
         {children}
+        <Toaster
+          theme="dark"
+          position="bottom-right"
+          toastOptions={{
+            style: {
+              background: "#0D131F",
+              border: "1px solid rgba(255, 255, 255, 0.12)",
+              color: "#F8FAFC",
+            },
+          }}
+        />
       </body>
     </html>
   );
