@@ -83,7 +83,7 @@ export default function ProfileTab({ wallet, onLogout }: ProfileTabProps) {
                 {wallet.isCloudSynced ? 'Synced & Encrypted on Drive' : 'Local device storage only'}
               </Text>
             </View>
-            <Text style={styles.settingStatus}>{wallet.isCloudSynced ? '🟢 Active' : '⚪ Disabled'}</Text>
+            <Text style={styles.settingStatus}>{wallet.isCloudSynced ? 'Active' : 'Disabled'}</Text>
           </View>
 
           <View style={styles.settingsDivider} />
@@ -93,7 +93,7 @@ export default function ProfileTab({ wallet, onLogout }: ProfileTabProps) {
               <Text style={styles.settingName}>Biometric Authentication</Text>
               <Text style={styles.settingDesc}>Face ID / Fingerprint protection</Text>
             </View>
-            <Text style={styles.settingStatus}>🟢 Active</Text>
+            <Text style={styles.settingStatus}>Active</Text>
           </View>
 
           <View style={styles.settingsDivider} />
@@ -105,7 +105,7 @@ export default function ProfileTab({ wallet, onLogout }: ProfileTabProps) {
                 {wallet.isSimulated ? 'Polygon Amoy (Simulation)' : 'Polygon Amoy (Live Network)'}
               </Text>
             </View>
-            <Text style={styles.settingStatus}>🟢 Connected</Text>
+            <Text style={styles.settingStatus}>Connected</Text>
           </View>
         </View>
       </View>

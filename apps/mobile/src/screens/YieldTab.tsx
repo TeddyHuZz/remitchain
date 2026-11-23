@@ -384,7 +384,7 @@ export default function YieldTab({ wallet, walletBalance, onTransactionComplete,
             <View style={styles.modalDetailRow}>
               <Text style={styles.modalLabel}>Type</Text>
               <Text style={styles.modalValue}>
-                {lastTxType === 'deposit' ? '📈 Deposited to Vault' : '📤 Withdrawn to Wallet'}
+                {lastTxType === 'deposit' ? 'Deposited to Vault' : 'Withdrawn to Wallet'}
               </Text>
             </View>
             <View style={styles.modalDetailRow}>

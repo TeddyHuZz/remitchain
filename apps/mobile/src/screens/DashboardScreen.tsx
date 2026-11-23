@@ -25,6 +25,8 @@ import {
   Copy,
   CheckCircle,
   Lightning,
+  CloudCheck,
+  MagnifyingGlass,
 } from 'phosphor-react-native';
 import { isAddress } from 'viem';
 import { THEME } from '../config/theme';
@@ -395,7 +397,10 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
                   <Text style={styles.gasBadgeText}>Gas Sponsored</Text>
                 </View>
                 {wallet.isCloudSynced && (
-                  <Text style={styles.cloudBackupText}>☁️ Cloud Synced</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <CloudCheck size={14} weight="duotone" color={THEME.accentMint} />
+                    <Text style={styles.cloudBackupText}>Cloud Synced</Text>
+                  </View>
                 )}
               </View>
             </View>
@@ -428,10 +433,9 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
               </View>
             </View>
 
-            {/* Quick Action Tabs */}
             <View style={styles.actionsRow}>
               <TouchableOpacity style={styles.actionTab} onPress={copyAddress} activeOpacity={0.7}>
-                <Text style={styles.actionTabIcon}>📋</Text>
+                <Copy size={18} weight="duotone" color={THEME.accentPrimaryHover} style={{ marginBottom: 4 }} />
                 <Text style={styles.actionTabText}>{copied ? 'Copied' : 'Copy Address'}</Text>
               </TouchableOpacity>
               <TouchableOpacity 
@@ -439,7 +443,7 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
                 onPress={() => Linking.openURL(`https://amoy.polygonscan.com/address/${wallet.smartAccountAddress}`)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.actionTabIcon}>🔍</Text>
+                <MagnifyingGlass size={18} weight="duotone" color={THEME.accentPrimaryHover} style={{ marginBottom: 4 }} />
                 <Text style={styles.actionTabText}>Explorer</Text>
               </TouchableOpacity>
             </View>
@@ -757,7 +761,10 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
 
                   <View style={styles.modalDetailRow}>
                     <Text style={styles.modalDetailLabel}>Status</Text>
-                    <Text style={styles.modalDetailStatus}>🟢 Completed (Batch)</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <CheckCircle size={14} weight="fill" color={THEME.accentMint} />
+                      <Text style={styles.modalDetailStatus}>Completed (Batch)</Text>
+                    </View>
                   </View>
 
                   {recentTx.saved && (
@@ -785,7 +792,10 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
 
                   <View style={styles.modalDetailRow}>
                     <Text style={styles.modalDetailLabel}>Status</Text>
-                    <Text style={styles.modalDetailStatus}>🟢 Completed</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <CheckCircle size={14} weight="fill" color={THEME.accentMint} />
+                      <Text style={styles.modalDetailStatus}>Completed</Text>
+                    </View>
                   </View>
 
                   {recentTx.saved && (
