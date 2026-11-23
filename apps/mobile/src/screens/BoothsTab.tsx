@@ -70,7 +70,12 @@ export default function BoothsTab({ onSelectBooth }: BoothsTabProps) {
       };
 
       const fetchIpfsMeta = async (ipfsHash: string) => {
-        const gateways = [`https://ipfs.io/ipfs/${ipfsHash}`, `https://gateway.pinata.cloud/ipfs/${ipfsHash}`];
+        const customGateway = WEB3_CONFIG.PINATA_GATEWAY.replace(/\/$/, "");
+        const gateways = [
+          ...(customGateway ? [`${customGateway}/ipfs/${ipfsHash}`] : []),
+          `https://gateway.pinata.cloud/ipfs/${ipfsHash}`,
+          `https://ipfs.io/ipfs/${ipfsHash}`
+        ];
         for (const url of gateways) {
           try {
             const res = await fetchWithTimeout(url, 3000);

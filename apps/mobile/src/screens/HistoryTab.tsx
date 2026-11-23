@@ -52,6 +52,29 @@ export default function HistoryTab({ customTxs, smartAccountAddress, isSimulated
       }
       setLoadingOnChain(true);
       try {
+        if (WEB3_CONFIG.API_URL) {
+          const apiRes = await fetch(`${WEB3_CONFIG.API_URL.replace(/\/$/, '')}/api/history?address=${smartAccountAddress}`);
+          if (apiRes.ok) {
+            const data = await apiRes.json();
+            if (data.configured && Array.isArray(data.transactions)) {
+              const fromApi: TxItem[] = data.transactions.map((row: any) => {
+                const isReceive = String(row.to_address).toLowerCase() === smartAccountAddress.toLowerCase();
+                return {
+                  id: String(row.id),
+                  type: isReceive ? 'receive' : 'send',
+                  amount: Number(row.amount_usdc ?? 0).toFixed(2),
+                  recipientOrSender: isReceive ? row.from_address : row.to_address,
+                  timestamp: row.block_number ? `Block #${row.block_number}` : 'Indexed',
+                  status: 'success',
+                  hash: row.tx_hash,
+                };
+              });
+              setOnChainTxs(fromApi);
+              return;
+            }
+          }
+        }
+
         const publicClient = createPublicClient({
           chain: polygonAmoy,
           transport: http(WEB3_CONFIG.PUBLIC_RPC_URL),

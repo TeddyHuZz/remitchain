@@ -23,6 +23,8 @@ export const WEB3_CONFIG = {
   PAYMASTER_URL: (projectId: string, chainId = 80002) => `https://rpc.zerodev.app/api/v3/${projectId}/chain/${chainId}?selfFunded=true`,
   
   PUBLIC_RPC_URL: process.env.EXPO_PUBLIC_RPC_URL || "https://rpc-amoy.polygon.technology/",
+  PINATA_GATEWAY: process.env.EXPO_PUBLIC_PINATA_GATEWAY || "",
+  API_URL: process.env.EXPO_PUBLIC_API_URL || "",
 
   BOOTH_REGISTRY_ADDRESS: process.env.EXPO_PUBLIC_BOOTH_REGISTRY_ADDRESS || "0x7bCB577350e600c1372036094f7F7464e54E90b6",
   USDC_ADDRESS: process.env.EXPO_PUBLIC_USDC_ADDRESS || "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582",
