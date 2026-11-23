@@ -90,8 +90,9 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
 
   useEffect(() => {
     fetchBalance();
-    registerPushToken(wallet.smartAccountAddress).catch(() => {});
-  }, [wallet.smartAccountAddress]);
+    const targetAddr = wallet.isSimulated ? wallet.eoaAddress : wallet.smartAccountAddress;
+    registerPushToken(targetAddr, (msg) => walletService.signMessage(msg)).catch(() => {});
+  }, [wallet.smartAccountAddress, wallet.eoaAddress, wallet.isSimulated]);
 
   const loadStoredData = async () => {
     try {
@@ -131,8 +132,17 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
 
 
 
+  const generatePickupCode = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 8; i++) {
+      code += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return `REMIT-${code}`;
+  };
+
   const handleSelectBooth = (boothAddress: string) => {
-    const generatedCode = `REMIT-${Math.floor(1000 + Math.random() * 9000)}`;
+    const generatedCode = generatePickupCode();
     setRecipient(boothAddress);
     setIsSplit(false);
     setIsCashOut(true);
@@ -480,7 +490,7 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
                   onPress={() => {
                     setIsSplit(false);
                     setIsCashOut(true);
-                    if (!pickupCode) setPickupCode(`REMIT-${Math.floor(1000 + Math.random() * 9000)}`);
+                    if (!pickupCode) setPickupCode(generatePickupCode());
                   }}
                   activeOpacity={0.7}
                 >

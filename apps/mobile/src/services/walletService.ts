@@ -157,6 +157,14 @@ class WalletService {
     return privKey as Hex;
   }
 
+  async signMessage(message: string): Promise<Hex> {
+    const authOptions = await this.getAuthOptions('Authorize action');
+    const privKey = await SecureStore.getItemAsync(EOA_PRIVATE_KEY_KEY, authOptions);
+    if (!privKey) throw new Error('Owner private key not found in storage.');
+    const account = privateKeyToAccount(privKey as Hex);
+    return account.signMessage({ message });
+  }
+
   async exportPrivateKeyForBackup(): Promise<string> {
     const authOptions = await this.getAuthOptions('Authorize exporting encrypted wallet backup');
     const privKey = await SecureStore.getItemAsync(EOA_PRIVATE_KEY_KEY, authOptions);
