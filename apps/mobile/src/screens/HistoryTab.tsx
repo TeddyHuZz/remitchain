@@ -10,8 +10,16 @@ import {
   Clipboard,
   ActivityIndicator,
 } from 'react-native';
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  ArrowsSplit,
+  ChartLineUp,
+  Lightning,
+} from 'phosphor-react-native';
 import { createPublicClient, http, parseAbiItem, formatUnits } from 'viem';
 import { polygonAmoy } from 'viem/chains';
+import { THEME } from '../config/theme';
 import { WEB3_CONFIG } from '../config/env';
 
 export interface TxItem {
@@ -137,9 +145,17 @@ export default function HistoryTab({ customTxs, smartAccountAddress, isSimulated
         >
           <View style={styles.leftCol}>
             <View style={styles.iconCircle}>
-              <Text style={styles.iconArrow}>
-                {isYieldDeposit ? '📈' : isYieldWithdraw ? '📤' : isSplit ? '⇆' : isSend ? '↓' : isFaucet ? '⚡' : '↑'}
-              </Text>
+              {isYieldDeposit || isYieldWithdraw ? (
+                <ChartLineUp size={18} weight="duotone" color={THEME.accentMint} />
+              ) : isSplit ? (
+                <ArrowsSplit size={18} weight="duotone" color={THEME.accentPrimaryHover} />
+              ) : isSend ? (
+                <ArrowUpRight size={18} weight="bold" color={THEME.accentPrimaryHover} />
+              ) : isFaucet ? (
+                <Lightning size={18} weight="fill" color={THEME.accentMint} />
+              ) : (
+                <ArrowDownLeft size={18} weight="bold" color={THEME.accentMint} />
+              )}
             </View>
             <View>
               <Text style={styles.titleText}>
@@ -245,7 +261,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   rowContainer: {
-    backgroundColor: '#0E1120',
+    backgroundColor: '#0D131F',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#1E293B',
@@ -266,7 +282,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#070913',
+    backgroundColor: '#06090F',
     borderWidth: 1,
     borderColor: '#1E293B',
     justifyContent: 'center',
@@ -311,7 +327,7 @@ const styles = StyleSheet.create({
     height: 8,
   },
   detailsPane: {
-    backgroundColor: '#070913',
+    backgroundColor: '#06090F',
     borderTopWidth: 1,
     borderTopColor: '#1E293B',
     padding: 12,
@@ -347,7 +363,7 @@ const styles = StyleSheet.create({
   },
   actionLink: {
     fontSize: 11,
-    color: '#818CF8',
+    color: '#3B82F6',
     fontWeight: '700',
   },
   detailsFooter: {
@@ -366,7 +382,7 @@ const styles = StyleSheet.create({
   },
   explorerLink: {
     fontSize: 11,
-    color: '#818CF8',
+    color: '#3B82F6',
     fontWeight: '700',
   },
   emptyContainer: {

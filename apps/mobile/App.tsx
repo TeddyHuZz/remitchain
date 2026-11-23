@@ -1,6 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View, ActivityIndicator } from 'react-native';
+import { useFonts } from 'expo-font';
+import {
+  PlusJakartaSans_400Regular,
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_700Bold,
+} from '@expo-google-fonts/plus-jakarta-sans';
+import {
+  JetBrainsMono_400Regular,
+  JetBrainsMono_600SemiBold,
+} from '@expo-google-fonts/jetbrains-mono';
+import { THEME } from './src/config/theme';
 
 
 // Hook unhandled promise rejections to print their stack traces
@@ -31,6 +42,13 @@ import { walletService, WalletState } from './src/services/walletService';
 type AppScreen = 'loading' | 'auth' | 'setup' | 'dashboard';
 
 export default function App() {
+  useFonts({
+    PlusJakartaSans_400Regular,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
+    JetBrainsMono_400Regular,
+    JetBrainsMono_600SemiBold,
+  });
   const [screen, setScreen] = useState<AppScreen>('loading');
   const [username, setUsername] = useState('');
   const [loginMethod, setLoginMethod] = useState<'passkey' | 'google'>('passkey');

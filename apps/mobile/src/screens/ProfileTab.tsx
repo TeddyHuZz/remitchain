@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
   },
   profileHeader: {
     alignItems: 'center',
-    backgroundColor: '#0E1120',
+    backgroundColor: '#0D131F',
     borderRadius: 16,
     paddingVertical: 20,
     paddingHorizontal: 16,
@@ -150,11 +150,11 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#6366F1',
+    backgroundColor: '#2563EB',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 10,
-    shadowColor: '#6366F1',
+    shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   infoCard: {
-    backgroundColor: '#0E1120',
+    backgroundColor: '#0D131F',
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
   },
   copyIndicator: {
     fontSize: 10,
-    color: '#818CF8',
+    color: '#3B82F6',
     fontWeight: '700',
   },
   monospaceValue: {
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   settingsCard: {
-    backgroundColor: '#0E1120',
+    backgroundColor: '#0D131F',
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#1E293B',

@@ -302,7 +302,7 @@ export default function YieldTab({ wallet, walletBalance, onTransactionComplete,
 
         {isProcessing ? (
           <View style={styles.processingContainer}>
-            <ActivityIndicator size="small" color="#6366F1" />
+            <ActivityIndicator size="small" color="#2563EB" />
             <Text style={styles.processingText}>{txProgress}</Text>
           </View>
         ) : (
@@ -425,7 +425,7 @@ const styles = StyleSheet.create({
 
   // ─── Yield Balance Card ────────────────────────────────────────────
   yieldCard: {
-    backgroundColor: '#0E1120',
+    backgroundColor: '#0D131F',
     borderRadius: 16,
     padding: 18,
     borderWidth: 1,
@@ -483,7 +483,7 @@ const styles = StyleSheet.create({
   },
   yieldBreakdown: {
     flexDirection: 'row',
-    backgroundColor: '#070913',
+    backgroundColor: '#06090F',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#1E293B',
@@ -524,7 +524,7 @@ const styles = StyleSheet.create({
 
   // ─── Estimated Earnings Card ───────────────────────────────────────
   earningsCard: {
-    backgroundColor: '#0E1120',
+    backgroundColor: '#0D131F',
     borderRadius: 16,
     padding: 18,
     borderWidth: 1,
@@ -547,7 +547,7 @@ const styles = StyleSheet.create({
   earningsGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: '#070913',
+    backgroundColor: '#06090F',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#1E293B',
@@ -572,7 +572,7 @@ const styles = StyleSheet.create({
 
   // ─── Action Card (Deposit/Withdraw) ────────────────────────────────
   actionCard: {
-    backgroundColor: '#0E1120',
+    backgroundColor: '#0D131F',
     borderRadius: 16,
     padding: 18,
     borderWidth: 1,
@@ -586,7 +586,7 @@ const styles = StyleSheet.create({
   },
   toggleRow: {
     flexDirection: 'row',
-    backgroundColor: '#070913',
+    backgroundColor: '#06090F',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#1E293B',
@@ -601,10 +601,10 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   toggleBtnActive: {
-    backgroundColor: '#6366F1',
+    backgroundColor: '#2563EB',
   },
   toggleBtnActiveWithdraw: {
-    backgroundColor: '#6366F1',
+    backgroundColor: '#2563EB',
   },
   toggleBtnText: {
     fontSize: 12,
@@ -634,7 +634,7 @@ const styles = StyleSheet.create({
   amountInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#070913',
+    backgroundColor: '#06090F',
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#1E293B',
@@ -659,7 +659,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(99, 102, 241, 0.25)',
   },
   maxButtonText: {
-    color: '#818CF8',
+    color: '#3B82F6',
     fontSize: 11,
     fontWeight: '800',
   },
@@ -677,8 +677,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   actionButtonWithdraw: {
-    backgroundColor: '#6366F1',
-    shadowColor: '#6366F1',
+    backgroundColor: '#2563EB',
+    shadowColor: '#2563EB',
   },
   actionButtonText: {
     color: '#FFFFFF',
@@ -696,7 +696,7 @@ const styles = StyleSheet.create({
 
   // ─── How It Works Card ─────────────────────────────────────────────
   infoCard: {
-    backgroundColor: '#0E1120',
+    backgroundColor: '#0D131F',
     borderRadius: 16,
     padding: 18,
     borderWidth: 1,
@@ -752,7 +752,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   modalCard: {
-    backgroundColor: '#0E1120',
+    backgroundColor: '#0D131F',
     borderRadius: 20,
     borderWidth: 1,
     borderColor: '#1E293B',
@@ -819,7 +819,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   modalPrimaryBtn: {
-    backgroundColor: '#6366F1',
+    backgroundColor: '#2563EB',
     borderRadius: 10,
     height: 48,
     width: '100%',
@@ -827,7 +827,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 20,
     marginBottom: 10,
-    shadowColor: '#6366F1',
+    shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 6,

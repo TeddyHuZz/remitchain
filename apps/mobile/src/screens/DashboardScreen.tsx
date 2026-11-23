@@ -15,7 +15,19 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
+import * as Haptics from 'expo-haptics';
+import {
+  House,
+  Storefront,
+  ClockCounterClockwise,
+  ChartLineUp,
+  UserCircle,
+  Copy,
+  CheckCircle,
+  Lightning,
+} from 'phosphor-react-native';
 import { isAddress } from 'viem';
+import { THEME } from '../config/theme';
 import { walletService, WalletState } from '../services/walletService';
 import BoothsTab, { BoothInfo } from './BoothsTab';
 import HistoryTab, { TxItem } from './HistoryTab';
@@ -103,6 +115,7 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
   };
 
   const copyAddress = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     try {
       Clipboard.setString(wallet.smartAccountAddress);
       setCopied(true);
@@ -370,7 +383,11 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
                 <Text style={styles.addressPillText} numberOfLines={1} ellipsizeMode="middle">
                   {wallet.smartAccountAddress}
                 </Text>
-                <Text style={styles.addressPillIcon}>{copied ? '✅' : '📋'}</Text>
+                {copied ? (
+                  <CheckCircle size={16} weight="fill" color={THEME.accentMint} />
+                ) : (
+                  <Copy size={16} weight="regular" color={THEME.textSecondary} />
+                )}
               </TouchableOpacity>
 
               <View style={styles.cardFooter}>
@@ -389,11 +406,14 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
                 <Text style={styles.balanceLabel}>Account Balance</Text>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <TouchableOpacity onPress={handleClaimFaucet} disabled={isRefreshing} style={styles.refreshButton} activeOpacity={0.7}>
-                    <Text style={styles.refreshButtonText}>⚡ Faucet</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Lightning size={13} weight="fill" color={THEME.accentMint} />
+                      <Text style={styles.refreshButtonText}>Faucet</Text>
+                    </View>
                   </TouchableOpacity>
                   <TouchableOpacity onPress={fetchBalance} disabled={isRefreshing} style={styles.refreshButton} activeOpacity={0.7}>
                     {isRefreshing ? (
-                      <ActivityIndicator size="small" color="#818CF8" />
+                      <ActivityIndicator size="small" color="#3B82F6" />
                     ) : (
                       <Text style={styles.refreshButtonText}>↻ Refresh</Text>
                     )}
@@ -467,7 +487,7 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
 
               {isSending ? (
                 <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="small" color="#6366F1" />
+                  <ActivityIndicator size="small" color="#2563EB" />
                   <Text style={styles.progressText}>{txProgress}</Text>
                 </View>
               ) : (
@@ -546,7 +566,29 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
                     </View>
                   )}
                   
-                  {/* Amount Input with MAX Button overlay */}
+                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
+                    {['10', '50', '100'].map((preset) => (
+                      <TouchableOpacity
+                        key={preset}
+                        onPress={() => {
+                          Haptics.selectionAsync().catch(() => {});
+                          setAmount(preset);
+                        }}
+                        style={{
+                          paddingHorizontal: 12,
+                          paddingVertical: 6,
+                          borderRadius: 8,
+                          backgroundColor: amount === preset ? THEME.accentPrimary : THEME.bgElevated,
+                          borderWidth: 1,
+                          borderColor: amount === preset ? THEME.accentPrimaryHover : THEME.borderSubtle,
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={{ color: THEME.textPrimary, fontSize: 12, fontWeight: '600' }}>${preset}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
                   <View style={styles.amountInputContainer}>
                     <TextInput
                       style={styles.amountInput}
@@ -567,6 +609,20 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
                       This sends ${(parseFloat(amount) * splitRatio / 100).toFixed(2)} USDC to Family and ${(parseFloat(amount) * (100 - splitRatio) / 100).toFixed(2)} USDC to Savings in a single atomic transaction.
                     </Text>
                   )}
+
+                  <View style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderRadius: 8,
+                    backgroundColor: THEME.accentMintTint,
+                    marginBottom: 12,
+                  }}>
+                    <Text style={{ color: THEME.textSecondary, fontSize: 12 }}>Traditional Wire: ~$6.50</Text>
+                    <Text style={{ color: THEME.accentMint, fontSize: 12, fontWeight: '700' }}>RemitChain: $0.00 Gas</Text>
+                  </View>
 
                   <TouchableOpacity style={styles.sendButton} onPress={handleSendTransfer} activeOpacity={0.8}>
                     <Text style={styles.sendButtonText}>
@@ -598,50 +654,64 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
           {renderActiveTabContent()}
         </View>
 
-        {/* Bottom Tab Navigation Bar */}
         <View style={styles.tabBar}>
           <TouchableOpacity
             style={styles.tabItem}
-            onPress={() => setActiveTab('dashboard')}
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => {});
+              setActiveTab('dashboard');
+            }}
             activeOpacity={0.7}
           >
-            <Text style={[styles.tabIcon, activeTab === 'dashboard' && styles.tabActiveText]}>🏠</Text>
+            <House size={22} weight={activeTab === 'dashboard' ? 'fill' : 'regular'} color={activeTab === 'dashboard' ? THEME.accentPrimaryHover : THEME.textMuted} />
             <Text style={[styles.tabLabel, activeTab === 'dashboard' && styles.tabActiveText]}>Dashboard</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.tabItem}
-            onPress={() => setActiveTab('booths')}
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => {});
+              setActiveTab('booths');
+            }}
             activeOpacity={0.7}
           >
-            <Text style={[styles.tabIcon, activeTab === 'booths' && styles.tabActiveText]}>🏪</Text>
+            <Storefront size={22} weight={activeTab === 'booths' ? 'fill' : 'regular'} color={activeTab === 'booths' ? THEME.accentPrimaryHover : THEME.textMuted} />
             <Text style={[styles.tabLabel, activeTab === 'booths' && styles.tabActiveText]}>Booths</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.tabItem}
-            onPress={() => setActiveTab('history')}
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => {});
+              setActiveTab('history');
+            }}
             activeOpacity={0.7}
           >
-            <Text style={[styles.tabIcon, activeTab === 'history' && styles.tabActiveText]}>🕒</Text>
+            <ClockCounterClockwise size={22} weight={activeTab === 'history' ? 'fill' : 'regular'} color={activeTab === 'history' ? THEME.accentPrimaryHover : THEME.textMuted} />
             <Text style={[styles.tabLabel, activeTab === 'history' && styles.tabActiveText]}>History</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.tabItem}
-            onPress={() => setActiveTab('yield')}
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => {});
+              setActiveTab('yield');
+            }}
             activeOpacity={0.7}
           >
-            <Text style={[styles.tabIcon, activeTab === 'yield' && styles.tabActiveText]}>📈</Text>
+            <ChartLineUp size={22} weight={activeTab === 'yield' ? 'fill' : 'regular'} color={activeTab === 'yield' ? THEME.accentPrimaryHover : THEME.textMuted} />
             <Text style={[styles.tabLabel, activeTab === 'yield' && styles.tabActiveText]}>Yield</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.tabItem}
-            onPress={() => setActiveTab('profile')}
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => {});
+              setActiveTab('profile');
+            }}
             activeOpacity={0.7}
           >
-            <Text style={[styles.tabIcon, activeTab === 'profile' && styles.tabActiveText]}>👤</Text>
+            <UserCircle size={22} weight={activeTab === 'profile' ? 'fill' : 'regular'} color={activeTab === 'profile' ? THEME.accentPrimaryHover : THEME.textMuted} />
             <Text style={[styles.tabLabel, activeTab === 'profile' && styles.tabActiveText]}>Profile</Text>
           </TouchableOpacity>
         </View>
@@ -758,7 +828,7 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#070913',
+    backgroundColor: '#06090F',
   },
   content: {
     flex: 1,
@@ -788,7 +858,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   card: {
-    backgroundColor: '#0E1120',
+    backgroundColor: '#0D131F',
     borderRadius: 16,
     padding: 18,
     borderWidth: 1,
@@ -834,7 +904,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   addressPill: {
-    backgroundColor: '#070913',
+    backgroundColor: '#06090F',
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#1E293B',
@@ -870,7 +940,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(99, 102, 241, 0.25)',
   },
   gasBadgeText: {
-    color: '#818CF8',
+    color: '#3B82F6',
     fontSize: 11,
     fontWeight: '700',
   },
@@ -880,7 +950,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   balanceContainer: {
-    backgroundColor: '#0E1120',
+    backgroundColor: '#0D131F',
     borderRadius: 16,
     padding: 18,
     borderWidth: 1,
@@ -916,7 +986,7 @@ const styles = StyleSheet.create({
   },
   refreshButtonText: {
     fontSize: 11,
-    color: '#818CF8',
+    color: '#3B82F6',
     fontWeight: '700',
   },
   balanceBody: {
@@ -931,7 +1001,7 @@ const styles = StyleSheet.create({
   },
   currency: {
     fontSize: 20,
-    color: '#818CF8',
+    color: '#3B82F6',
     fontWeight: '700',
   },
   usdEquivalent: {
@@ -948,7 +1018,7 @@ const styles = StyleSheet.create({
   },
   actionTab: {
     flex: 1,
-    backgroundColor: '#0E1120',
+    backgroundColor: '#0D131F',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#1E293B',
@@ -967,7 +1037,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.1,
   },
   sendCard: {
-    backgroundColor: '#0E1120',
+    backgroundColor: '#0D131F',
     borderRadius: 16,
     padding: 18,
     borderWidth: 1,
@@ -993,7 +1063,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   input: {
-    backgroundColor: '#070913',
+    backgroundColor: '#06090F',
     borderRadius: 10,
     height: 48,
     paddingHorizontal: 14,
@@ -1007,7 +1077,7 @@ const styles = StyleSheet.create({
   amountInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#070913',
+    backgroundColor: '#06090F',
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#1E293B',
@@ -1032,17 +1102,17 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(99, 102, 241, 0.25)',
   },
   maxButtonText: {
-    color: '#818CF8',
+    color: '#3B82F6',
     fontSize: 11,
     fontWeight: '800',
   },
   sendButton: {
-    backgroundColor: '#6366F1',
+    backgroundColor: '#2563EB',
     borderRadius: 10,
     height: 48,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#6366F1',
+    shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
@@ -1067,7 +1137,7 @@ const styles = StyleSheet.create({
   receiptContainer: {
     marginTop: 14,
     padding: 14,
-    backgroundColor: '#070913',
+    backgroundColor: '#06090F',
     borderRadius: 10,
     borderWidth: 1,
     borderColor: 'rgba(16, 185, 129, 0.2)',
@@ -1101,7 +1171,7 @@ const styles = StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
     height: 60,
-    backgroundColor: '#0E1120',
+    backgroundColor: '#0D131F',
     borderTopWidth: 1,
     borderTopColor: '#1E293B',
     paddingBottom: Platform.OS === 'ios' ? 12 : 6,
@@ -1125,7 +1195,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   tabActiveText: {
-    color: '#818CF8',
+    color: '#3B82F6',
   },
   scrollContent: {
     paddingBottom: 24,
@@ -1138,7 +1208,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   modalCard: {
-    backgroundColor: '#0E1120',
+    backgroundColor: '#0D131F',
     borderRadius: 20,
     borderWidth: 1,
     borderColor: '#1E293B',
@@ -1181,7 +1251,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   modalDetails: {
-    backgroundColor: '#070913',
+    backgroundColor: '#06090F',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#1E293B',
@@ -1229,7 +1299,7 @@ const styles = StyleSheet.create({
   },
   splitToggleContainer: {
     flexDirection: 'row',
-    backgroundColor: '#070913',
+    backgroundColor: '#06090F',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#1E293B',
@@ -1244,7 +1314,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   splitToggleButtonActive: {
-    backgroundColor: '#6366F1',
+    backgroundColor: '#2563EB',
   },
   splitToggleText: {
     fontSize: 12,
@@ -1272,7 +1342,7 @@ const styles = StyleSheet.create({
   ratioButton: {
     flex: 1,
     height: 34,
-    backgroundColor: '#070913',
+    backgroundColor: '#06090F',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#1E293B',
@@ -1280,7 +1350,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   ratioButtonActive: {
-    borderColor: '#6366F1',
+    borderColor: '#2563EB',
     backgroundColor: 'rgba(99, 102, 241, 0.1)',
   },
   ratioText: {
@@ -1289,7 +1359,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   ratioTextActive: {
-    color: '#818CF8',
+    color: '#3B82F6',
   },
   breakdownText: {
     fontSize: 11,
@@ -1304,7 +1374,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(16, 185, 129, 0.15)',
   },
   modalPrimaryBtn: {
-    backgroundColor: '#6366F1',
+    backgroundColor: '#2563EB',
     borderRadius: 10,
     height: 44,
     width: '100%',

@@ -217,7 +217,7 @@ export default function BoothsTab({ onSelectBooth }: BoothsTabProps) {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             {loading ? (
-              <ActivityIndicator size="small" color="#6366F1" />
+              <ActivityIndicator size="small" color="#2563EB" />
             ) : (
               <Text style={styles.emptyText}>No active booths found</Text>
             )}
@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   searchBar: {
-    backgroundColor: '#0E1120',
+    backgroundColor: '#0D131F',
     borderRadius: 10,
     height: 44,
     paddingHorizontal: 14,
@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   card: {
-    backgroundColor: '#0E1120',
+    backgroundColor: '#0D131F',
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
@@ -322,7 +322,7 @@ const styles = StyleSheet.create({
   },
   addressPill: {
     flex: 1,
-    backgroundColor: '#070913',
+    backgroundColor: '#06090F',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#1E293B',
@@ -341,11 +341,11 @@ const styles = StyleSheet.create({
   },
   copyIcon: {
     fontSize: 10,
-    color: '#818CF8',
+    color: '#3B82F6',
     fontWeight: '700',
   },
   sendButton: {
-    backgroundColor: '#6366F1',
+    backgroundColor: '#2563EB',
     borderRadius: 8,
     height: 38,
     paddingHorizontal: 16,
