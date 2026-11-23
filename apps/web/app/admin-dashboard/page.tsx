@@ -15,47 +15,9 @@ import {
 } from "@phosphor-icons/react";
 import { createWalletClient, createPublicClient, custom, http, formatUnits } from "viem";
 import { polygonAmoy } from "viem/chains";
+import { BOOTH_REGISTRY_ABI } from "@repo/contracts-sdk";
 import { toast } from "sonner";
 import styles from "./page.module.css";
-
-const BOOTH_REGISTRY_ABI = [
-  {
-    name: "getBoothAddresses",
-    type: "function",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "address[]" }]
-  },
-  {
-    name: "booths",
-    type: "function",
-    stateMutability: "view",
-    inputs: [{ name: "", type: "address" }],
-    outputs: [
-      { name: "ipfsHash", type: "string" },
-      { name: "collateral", type: "uint256" },
-      { name: "status", type: "uint8" },
-      { name: "submittedAt", type: "uint256" }
-    ]
-  },
-  {
-    name: "reviewBooth",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "vendor", type: "address" },
-      { name: "status", type: "uint8" }
-    ],
-    outputs: []
-  },
-  {
-    name: "owner",
-    type: "function",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "address" }]
-  }
-] as const;
 
 interface Applicant {
   address: string;

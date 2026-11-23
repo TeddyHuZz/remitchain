@@ -15,7 +15,6 @@
     "@neondatabase/serverless": "^1.2.1",
     "@phosphor-icons/react": "^2.1.10",
     "@repo/contracts-sdk": "workspace:*",
-    "@repo/ui": "workspace:*",
     "motion": "^14.14.0",
     "next": "16.2.0",
     "react": "^19.2.0",

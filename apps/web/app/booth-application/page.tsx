@@ -17,54 +17,9 @@ import {
 } from "@phosphor-icons/react";
 import { createWalletClient, createPublicClient, custom, http, parseUnits, formatUnits } from "viem";
 import { polygonAmoy } from "viem/chains";
-import { REMITTANCE_ESCROW_ABI } from "@repo/contracts-sdk";
+import { BOOTH_REGISTRY_ABI, ERC20_ABI, REMITTANCE_ESCROW_ABI } from "@repo/contracts-sdk";
 import { toast } from "sonner";
 import styles from "./page.module.css";
-
-const IERC20_ABI = [
-  {
-    name: "approve",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "spender", type: "address" },
-      { name: "amount", type: "uint256" }
-    ],
-    outputs: [{ name: "", type: "bool" }]
-  }
-] as const;
-
-const BOOTH_REGISTRY_ABI = [
-  {
-    name: "applyForBooth",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "ipfsHash", type: "string" },
-      { name: "collateralAmount", type: "uint256" }
-    ],
-    outputs: []
-  },
-  {
-    name: "booths",
-    type: "function",
-    stateMutability: "view",
-    inputs: [{ name: "", type: "address" }],
-    outputs: [
-      { name: "ipfsHash", type: "string" },
-      { name: "collateral", type: "uint256" },
-      { name: "status", type: "uint8" },
-      { name: "submittedAt", type: "uint256" }
-    ]
-  },
-  {
-    name: "cancelApplication",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [],
-    outputs: []
-  }
-] as const;
 
 export default function BoothApplication() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
@@ -90,6 +45,7 @@ export default function BoothApplication() {
     submittedAt: number;
   } | null>(null);
   const [checkingExisting, setCheckingExisting] = useState(false);
+  const [exitRequestedAt, setExitRequestedAt] = useState(0);
   const [stats, setStats] = useState({ payouts: 0, volume: 0, commissions: 0 });
   const [verificationCode, setVerificationCode] = useState("");
   const [orderIdInput, setOrderIdInput] = useState("");
@@ -155,14 +111,37 @@ export default function BoothApplication() {
       const submittedAt = Number(submittedAtRaw);
       if (submittedAt > 0) {
         const statusMap = ["PENDING", "APPROVED", "REJECTED"] as const;
+        const boothStatus = statusMap[statusNum] || "PENDING";
         setExistingBooth({
           ipfsHash,
           collateral: Number(formatUnits(collateralRaw, 6)),
-          status: statusMap[statusNum] || "PENDING",
+          status: boothStatus,
           submittedAt: submittedAt * 1000
         });
+        const exitTs = await publicClient.readContract({
+          address: registryAddress as `0x${string}`,
+          abi: BOOTH_REGISTRY_ABI,
+          functionName: "exitRequestedAt",
+          args: [walletAddress as `0x${string}`]
+        });
+        setExitRequestedAt(Number(exitTs));
+
+        if (boothStatus === "APPROVED") {
+          const payoutsRes = await fetch(`/api/payouts?booth=${walletAddress}`).catch(() => null);
+          if (payoutsRes?.ok) {
+            const data = await payoutsRes.json();
+            if (data.configured) {
+              setStats({
+                payouts: Number(data.payouts ?? 0),
+                volume: Number(data.volume ?? 0),
+                commissions: Number(data.commissions ?? 0)
+              });
+            }
+          }
+        }
       } else {
         setExistingBooth(null);
+        setExitRequestedAt(0);
       }
     } catch (e) {
       console.error("Failed to check existing booth", e);
@@ -308,7 +287,7 @@ export default function BoothApplication() {
       setTxStep("Requesting USDC collateral allowance...");
       const approveTxHash = await walletClient.writeContract({
         address: usdcAddress as `0x${string}`,
-        abi: IERC20_ABI,
+        abi: ERC20_ABI,
         functionName: "approve",
         args: [registryAddress as `0x${string}`, collateralAmount],
         account: walletAddress as `0x${string}`
@@ -343,6 +322,39 @@ export default function BoothApplication() {
       await checkExistingBooth();
     } catch (err: any) {
       setFormError(err.message || "An unexpected transaction error occurred.");
+    } finally {
+      setIsSubmitting(false);
+      setTxStep("");
+    }
+  };
+
+  const handleRequestExit = async () => {
+    if (!walletAddress || !registryAddress) return;
+    setIsSubmitting(true);
+    setFormError(null);
+    setTxStep("Submitting 24h exit cooldown request...");
+    try {
+      await ensureCorrectChain();
+      const walletClient = createWalletClient({
+        chain: polygonAmoy,
+        transport: custom((window as any).ethereum)
+      });
+      const publicClient = createPublicClient({
+        chain: polygonAmoy,
+        transport: http(rpcUrl)
+      });
+      const txHash = await walletClient.writeContract({
+        address: registryAddress as `0x${string}`,
+        abi: BOOTH_REGISTRY_ABI,
+        functionName: "requestExit",
+        args: [],
+        account: walletAddress as `0x${string}`
+      });
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
+      await checkExistingBooth();
+      toast.success("Exit requested. You can reclaim your stake after the 24h cooldown.");
+    } catch (err: any) {
+      setFormError(err.message || "Failed to request exit.");
     } finally {
       setIsSubmitting(false);
       setTxStep("");
@@ -623,14 +635,29 @@ export default function BoothApplication() {
                 </div>
 
                 <div style={{ marginTop: "8px", borderTop: "1px solid rgba(255, 255, 255, 0.05)", paddingTop: "20px" }}>
-                  <button 
-                    type="button" 
-                    className={styles.cancelBtn} 
-                    onClick={handleCancel}
-                    disabled={isSubmitting}
-                  >
-                    Deactivate Booth & Reclaim Stake
-                  </button>
+                  {exitRequestedAt === 0 ? (
+                    <button
+                      type="button"
+                      className={styles.cancelBtn}
+                      onClick={handleRequestExit}
+                      disabled={isSubmitting}
+                    >
+                      Request 24h Exit to Reclaim Stake
+                    </button>
+                  ) : Date.now() / 1000 < exitRequestedAt + 86400 ? (
+                    <button type="button" className={styles.cancelBtn} disabled>
+                      Exit Cooldown Active (Unlocks {new Date((exitRequestedAt + 86400) * 1000).toLocaleString()})
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className={styles.cancelBtn}
+                      onClick={handleCancel}
+                      disabled={isSubmitting}
+                    >
+                      Deactivate Booth & Reclaim Stake
+                    </button>
+                  )}
                 </div>
 
                 {/* Customer Verification Modal */}
