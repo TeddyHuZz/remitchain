@@ -109,7 +109,12 @@ export default function Globe() {
           );
 
         const fetchIpfsMeta = async (ipfsHash: string) => {
-          const gateways = [`https://ipfs.io/ipfs/${ipfsHash}`, `https://gateway.pinata.cloud/ipfs/${ipfsHash}`];
+          const customGateway = process.env.NEXT_PUBLIC_PINATA_GATEWAY?.replace(/\/$/, "");
+          const gateways = [
+            ...(customGateway ? [`${customGateway}/ipfs/${ipfsHash}`] : []),
+            `https://gateway.pinata.cloud/ipfs/${ipfsHash}`,
+            `https://ipfs.io/ipfs/${ipfsHash}`
+          ];
           for (const url of gateways) {
             try {
               const res = await fetch(url, { signal: AbortSignal.timeout(2500) });
@@ -359,8 +364,8 @@ export default function Globe() {
             width={dimensions.width}
             height={dimensions.height}
             backgroundColor="rgba(0,0,0,0)"
-            globeImageUrl="//unpkg.com/three-globe/example/img/earth-night.jpg"
-            bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
+            globeImageUrl="/textures/earth-night.jpg"
+            bumpImageUrl="/textures/earth-topology.png"
             atmosphereColor="#2563EB"
             atmosphereAltitude={0.16}
             showAtmosphere

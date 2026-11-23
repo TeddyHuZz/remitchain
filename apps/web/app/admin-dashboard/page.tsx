@@ -159,7 +159,12 @@ export default function AdminDashboard() {
 
       const statusMap = ["PENDING", "APPROVED", "REJECTED"] as const;
       const fetchIpfsMeta = async (ipfsHash: string) => {
-        const gateways = [`https://ipfs.io/ipfs/${ipfsHash}`, `https://gateway.pinata.cloud/ipfs/${ipfsHash}`];
+        const customGateway = process.env.NEXT_PUBLIC_PINATA_GATEWAY?.replace(/\/$/, "");
+        const gateways = [
+          ...(customGateway ? [`${customGateway}/ipfs/${ipfsHash}`] : []),
+          `https://gateway.pinata.cloud/ipfs/${ipfsHash}`,
+          `https://ipfs.io/ipfs/${ipfsHash}`
+        ];
         for (const url of gateways) {
           try {
             const metaRes = await fetch(url, { signal: AbortSignal.timeout(3000) });

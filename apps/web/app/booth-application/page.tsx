@@ -285,6 +285,24 @@ export default function BoothApplication() {
       const { ipfsHash } = await ipfsResponse.json();
       setTxStep(`IPFS Upload complete! Hash: ${ipfsHash.slice(0, 8)}...`);
 
+      await fetch("/api/merchants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          address: walletAddress,
+          signature: pinSignature,
+          timestamp,
+          merchant: {
+            storeName,
+            ownerName,
+            email,
+            address,
+            coordinates,
+            ipfsHash
+          }
+        })
+      }).catch(() => {});
+
       const collateralAmount = parseUnits(collateral, 6);
 
       setTxStep("Requesting USDC collateral allowance...");
@@ -410,6 +428,17 @@ export default function BoothApplication() {
       });
 
       await publicClient.waitForTransactionReceipt({ hash: txHash });
+
+      await fetch("/api/payouts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          boothAddress: walletAddress,
+          orderId: Number(orderIdInput.trim()),
+          amountUsdc: amount,
+          txHash
+        })
+      }).catch(() => {});
 
       const newStats = {
         payouts: stats.payouts + 1,

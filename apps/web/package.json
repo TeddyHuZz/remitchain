@@ -9,9 +9,10 @@
     "start": "next start",
     "lint": "eslint --max-warnings 0",
     "check-types": "next typegen && tsc --noEmit",
-    "test": "node --test app/api/ipfs/route.test.ts app/contracts-sdk.test.ts"
+    "test": "node --test app/api/ipfs/route.test.ts app/api/webhooks/alchemy/route.test.ts app/contracts-sdk.test.ts"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.2.1",
     "@phosphor-icons/react": "^2.1.10",
     "@repo/contracts-sdk": "workspace:*",
     "@repo/ui": "workspace:*",
