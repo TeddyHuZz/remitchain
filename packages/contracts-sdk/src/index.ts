@@ -92,6 +92,34 @@ export const BOOTH_REGISTRY_ABI = [
     inputs: [],
     outputs: [],
   },
+  {
+    type: "function",
+    name: "requestExit",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "revokeBooth",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "_vendor", type: "address" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "exitRequestedAt",
+    stateMutability: "view",
+    inputs: [{ name: "", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "COOLDOWN_PERIOD",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
 ] as const;
 
 export const REMITTANCE_ESCROW_ABI = [
