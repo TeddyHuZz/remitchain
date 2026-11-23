@@ -1,6 +1,12 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
   "ui": "tui",
+  "globalEnv": [
+    "DATABASE_URL",
+    "SENTRY_DSN",
+    "PINATA_JWT",
+    "ALCHEMY_WEBHOOK_SIGNING_KEY"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
