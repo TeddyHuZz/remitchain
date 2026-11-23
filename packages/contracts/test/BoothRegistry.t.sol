@@ -67,4 +67,34 @@ contract BoothRegistryTest is Test {
         vm.expectRevert();
         registry.reviewBooth(vendor, BoothRegistry.Status.Approved);
     }
+
+    function test_RevokeApprovedBooth() public {
+        vm.prank(vendor);
+        registry.applyForBooth("QmTest1", 10 * 10 ** 6);
+        registry.reviewBooth(vendor, BoothRegistry.Status.Approved);
+
+        registry.revokeBooth(vendor);
+        assertEq(usdc.balanceOf(vendor), 100 * 10 ** 6);
+        (, , BoothRegistry.Status status, ) = registry.booths(vendor);
+        assertEq(uint256(status), uint256(BoothRegistry.Status.Rejected));
+    }
+
+    function test_ApprovedBoothExitRequiresCooldown() public {
+        vm.prank(vendor);
+        registry.applyForBooth("QmTest1", 10 * 10 ** 6);
+        registry.reviewBooth(vendor, BoothRegistry.Status.Approved);
+
+        vm.prank(vendor);
+        vm.expectRevert("Cooldown active");
+        registry.cancelApplication();
+
+        vm.prank(vendor);
+        registry.requestExit();
+
+        vm.warp(block.timestamp + 1 days);
+        vm.prank(vendor);
+        registry.cancelApplication();
+        assertEq(usdc.balanceOf(vendor), 100 * 10 ** 6);
+        assertEq(registry.getBoothAddresses().length, 0);
+    }
 }

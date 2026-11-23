@@ -65,4 +65,15 @@ contract YieldVaultTest is Test {
         vm.expectRevert("YieldVault: insufficient reserves");
         emptyVault.withdraw(type(uint256).max);
     }
+
+    function test_SetAPYDoesNotApplyRetroactively() public {
+        vm.prank(user);
+        vault.deposit(1_000 * 10 ** 6);
+
+        vm.warp(block.timestamp + 182.5 days);
+        vault.setAPY(1000);
+
+        vm.warp(block.timestamp + 182.5 days);
+        assertEq(vault.interestOf(user), 75 * 10 ** 6);
+    }
 }

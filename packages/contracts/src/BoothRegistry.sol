@@ -11,6 +11,7 @@ contract BoothRegistry is Ownable, ReentrancyGuard {
 
     IERC20 public immutable usdcToken;
     uint256 public constant MINIMUM_COLLATERAL = 10 * 10 ** 6;
+    uint256 public constant COOLDOWN_PERIOD = 1 days;
 
     enum Status {
         Pending,
@@ -26,10 +27,13 @@ contract BoothRegistry is Ownable, ReentrancyGuard {
     }
 
     mapping(address => Booth) public booths;
+    mapping(address => uint256) public exitRequestedAt;
+    mapping(address => uint256) private boothIndex;
     address[] public boothAddresses;
 
     event BoothApplied(address indexed vendor, string ipfsHash, uint256 collateral);
     event BoothReviewed(address indexed vendor, Status status);
+    event ExitRequested(address indexed vendor, uint256 unlockAt);
     event ApplicationCancelled(address indexed vendor, uint256 refundedCollateral);
 
     constructor(address _usdcToken) Ownable(msg.sender) {
@@ -45,17 +49,17 @@ contract BoothRegistry is Ownable, ReentrancyGuard {
             "Application already exists"
         );
 
-        bool isNewAddress = booths[msg.sender].submittedAt == 0;
-
         booths[msg.sender] = Booth({
             ipfsHash: _ipfsHash,
             collateral: _collateralAmount,
             status: Status.Pending,
             submittedAt: block.timestamp
         });
+        exitRequestedAt[msg.sender] = 0;
 
-        if (isNewAddress) {
+        if (boothIndex[msg.sender] == 0) {
             boothAddresses.push(msg.sender);
+            boothIndex[msg.sender] = boothAddresses.length;
         }
 
         usdcToken.safeTransferFrom(msg.sender, address(this), _collateralAmount);
@@ -79,6 +83,25 @@ contract BoothRegistry is Ownable, ReentrancyGuard {
         emit BoothReviewed(_vendor, _status);
     }
 
+    function revokeBooth(address _vendor) external onlyOwner nonReentrant {
+        Booth storage booth = booths[_vendor];
+        require(booth.submittedAt > 0 && booth.status == Status.Approved, "Booth not approved");
+        booth.status = Status.Rejected;
+        exitRequestedAt[_vendor] = 0;
+        uint256 refundAmount = booth.collateral;
+        booth.collateral = 0;
+        usdcToken.safeTransfer(_vendor, refundAmount);
+        emit BoothReviewed(_vendor, Status.Rejected);
+    }
+
+    function requestExit() external {
+        Booth storage booth = booths[msg.sender];
+        require(booth.submittedAt > 0 && booth.status == Status.Approved, "Booth not approved");
+        require(exitRequestedAt[msg.sender] == 0, "Exit already requested");
+        exitRequestedAt[msg.sender] = block.timestamp;
+        emit ExitRequested(msg.sender, block.timestamp + COOLDOWN_PERIOD);
+    }
+
     function cancelApplication() external nonReentrant {
         Booth storage booth = booths[msg.sender];
         require(booth.submittedAt > 0, "Application not found");
@@ -87,15 +110,25 @@ contract BoothRegistry is Ownable, ReentrancyGuard {
             "Cannot cancel this application"
         );
 
+        if (booth.status == Status.Approved) {
+            uint256 requestedAt = exitRequestedAt[msg.sender];
+            require(requestedAt > 0 && block.timestamp >= requestedAt + COOLDOWN_PERIOD, "Cooldown active");
+        }
+
         uint256 refundAmount = booth.collateral;
         delete booths[msg.sender];
+        exitRequestedAt[msg.sender] = 0;
 
-        for (uint256 i = 0; i < boothAddresses.length; i++) {
-            if (boothAddresses[i] == msg.sender) {
-                boothAddresses[i] = boothAddresses[boothAddresses.length - 1];
-                boothAddresses.pop();
-                break;
+        uint256 idx = boothIndex[msg.sender];
+        if (idx > 0) {
+            uint256 lastIdx = boothAddresses.length;
+            if (idx != lastIdx) {
+                address lastAddr = boothAddresses[lastIdx - 1];
+                boothAddresses[idx - 1] = lastAddr;
+                boothIndex[lastAddr] = idx;
             }
+            boothAddresses.pop();
+            delete boothIndex[msg.sender];
         }
 
         usdcToken.safeTransfer(msg.sender, refundAmount);

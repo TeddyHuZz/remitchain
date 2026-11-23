@@ -11,14 +11,17 @@ contract YieldVault is Ownable, ReentrancyGuard {
 
     uint256 public constant SECONDS_PER_YEAR = 365 days;
     uint256 public constant USDC_DECIMALS = 6;
+    uint256 private constant INDEX_SCALE = 1e18;
 
     IERC20 public immutable usdc;
     uint256 public apyBps;
+    uint256 public accruedIndex;
+    uint256 public lastIndexUpdate;
 
     struct DepositInfo {
         uint256 principal;
         uint256 accruedInterest;
-        uint256 lastUpdateTimestamp;
+        uint256 userIndex;
     }
 
     mapping(address => DepositInfo) public deposits;
@@ -33,10 +36,12 @@ contract YieldVault is Ownable, ReentrancyGuard {
         require(_apyBps > 0 && _apyBps <= 5000, "YieldVault: invalid APY");
         usdc = IERC20(_usdc);
         apyBps = _apyBps;
+        lastIndexUpdate = block.timestamp;
     }
 
     function deposit(uint256 amount) external nonReentrant {
         require(amount > 0, "YieldVault: zero amount");
+        _updateGlobalIndex();
         _settleInterest(msg.sender);
 
         deposits[msg.sender].principal += amount;
@@ -47,6 +52,7 @@ contract YieldVault is Ownable, ReentrancyGuard {
     }
 
     function withdraw(uint256 amount) external nonReentrant {
+        _updateGlobalIndex();
         _settleInterest(msg.sender);
 
         DepositInfo storage info = deposits[msg.sender];
@@ -97,21 +103,33 @@ contract YieldVault is Ownable, ReentrancyGuard {
 
     function setAPY(uint256 _apyBps) external onlyOwner {
         require(_apyBps > 0 && _apyBps <= 5000, "YieldVault: invalid APY");
+        _updateGlobalIndex();
         apyBps = _apyBps;
         emit APYUpdated(_apyBps);
     }
 
+    function _currentIndex() internal view returns (uint256) {
+        if (block.timestamp <= lastIndexUpdate) return accruedIndex;
+        uint256 elapsed = block.timestamp - lastIndexUpdate;
+        return accruedIndex + (INDEX_SCALE * apyBps * elapsed) / (10000 * SECONDS_PER_YEAR);
+    }
+
+    function _updateGlobalIndex() internal {
+        accruedIndex = _currentIndex();
+        lastIndexUpdate = block.timestamp;
+    }
+
     function _settleInterest(address user) internal {
         DepositInfo storage info = deposits[user];
-        if (info.lastUpdateTimestamp > 0 && info.principal > 0) {
-            info.accruedInterest += _calculatePendingInterest(info);
+        if (info.principal > 0) {
+            info.accruedInterest += (info.principal * (accruedIndex - info.userIndex)) / INDEX_SCALE;
         }
-        info.lastUpdateTimestamp = block.timestamp;
+        info.userIndex = accruedIndex;
     }
 
     function _calculatePendingInterest(DepositInfo memory info) internal view returns (uint256) {
-        if (info.lastUpdateTimestamp == 0 || info.principal == 0) return 0;
-        uint256 elapsed = block.timestamp - info.lastUpdateTimestamp;
-        return (info.principal * apyBps * elapsed) / (10000 * SECONDS_PER_YEAR);
+        if (info.principal == 0) return 0;
+        uint256 current = _currentIndex();
+        return (info.principal * (current - info.userIndex)) / INDEX_SCALE;
     }
 }
