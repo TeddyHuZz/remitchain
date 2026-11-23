@@ -32,9 +32,13 @@ export async function POST(request: Request) {
 
     const payload = JSON.parse(rawBody);
     const activities = Array.isArray(payload?.event?.activity) ? payload.event.activity : [];
+    const expectedUsdc = (process.env.NEXT_PUBLIC_USDC_ADDRESS || "").toLowerCase();
     let indexed = 0;
 
     for (const act of activities) {
+      const tokenAddress = String(act?.rawContract?.address ?? "").toLowerCase();
+      if (!expectedUsdc || tokenAddress !== expectedUsdc) continue;
+
       const txHash = String(act?.hash ?? "");
       const fromAddress = String(act?.fromAddress ?? "").toLowerCase();
       const toAddress = String(act?.toAddress ?? "").toLowerCase();

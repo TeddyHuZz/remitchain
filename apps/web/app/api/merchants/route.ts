@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server.js";
-import { isAddress, verifyMessage } from "viem";
+import { createPublicClient, http, isAddress, verifyMessage } from "viem";
+import { polygonAmoy } from "viem/chains";
+import { AMOY_PUBLIC_RPC, BOOTH_REGISTRY_ABI } from "@repo/contracts-sdk";
 import { getDb } from "../../../lib/db.ts";
 
 export async function GET(request: Request) {
@@ -7,10 +9,35 @@ export async function GET(request: Request) {
   if (!db) {
     return NextResponse.json({ merchants: [], configured: false });
   }
+
+  const address = request.headers.get("x-wallet-address");
+  const signature = request.headers.get("x-wallet-signature");
+  const timestampRaw = request.headers.get("x-wallet-timestamp");
+  const timestamp = timestampRaw ? Number(timestampRaw) : NaN;
+
+  if (!address || !isAddress(address) || !signature || !Number.isFinite(timestamp)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (Math.abs(Date.now() - timestamp) > 5 * 60 * 1000) {
+    return NextResponse.json({ error: "Expired signature" }, { status: 401 });
+  }
+
+  const valid = await verifyMessage({
+    address,
+    message: `RemitChain Merchants Read:${address.toLowerCase()}:${timestamp}`,
+    signature: signature as `0x${string}`,
+  });
+  if (!valid) {
+    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+  }
+
   const { searchParams } = new URL(request.url);
   const wallet = searchParams.get("wallet")?.toLowerCase();
 
   if (wallet && isAddress(wallet)) {
+    if (wallet !== address.toLowerCase()) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     const rows = await db`
       SELECT wallet_address, store_name, owner_name, email, physical_address, coordinates, ipfs_hash, status, updated_at
       FROM merchants
@@ -18,6 +45,24 @@ export async function GET(request: Request) {
       LIMIT 1
     `;
     return NextResponse.json({ merchant: rows[0] ?? null, configured: true });
+  }
+
+  const registryAddress = process.env.NEXT_PUBLIC_BOOTH_REGISTRY_ADDRESS;
+  if (!registryAddress || !isAddress(registryAddress)) {
+    return NextResponse.json({ error: "Registry not configured" }, { status: 500 });
+  }
+
+  const publicClient = createPublicClient({
+    chain: polygonAmoy,
+    transport: http(process.env.NEXT_PUBLIC_RPC_URL || AMOY_PUBLIC_RPC),
+  });
+  const owner = await publicClient.readContract({
+    address: registryAddress as `0x${string}`,
+    abi: BOOTH_REGISTRY_ABI,
+    functionName: "owner",
+  });
+  if (owner.toLowerCase() !== address.toLowerCase()) {
+    return NextResponse.json({ error: "Forbidden: owner signature required" }, { status: 403 });
   }
 
   const rows = await db`
