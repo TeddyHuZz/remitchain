@@ -1,14 +1,13 @@
 .wrapper {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: 300px minmax(0, 1fr);
   gap: 24px;
   width: 100%;
   max-width: 1200px;
-  background: rgba(13, 19, 31, 0.72);
+  background: rgba(13, 19, 31, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
   padding: 24px;
-  backdrop-filter: blur(12px);
   color: #F8FAFC;
 }
 
@@ -16,6 +15,25 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
+}
+
+.mapColumn {
+  position: relative;
+  min-width: 0;
+  width: 100%;
+  height: 480px;
+}
+
+.globeBox {
+  position: relative;
+  width: 100%;
+  height: 480px;
+  background-color: #06090F;
+  background-image: radial-gradient(circle at 50% 50%, rgba(37, 99, 235, 0.1) 0%, rgba(6, 9, 15, 1) 75%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 .boothList {
@@ -51,5 +69,10 @@
   .wrapper {
     grid-template-columns: 1fr;
     padding: 16px;
+  }
+
+  .mapColumn,
+  .globeBox {
+    height: 380px;
   }
 }

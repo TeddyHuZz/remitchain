@@ -56,7 +56,8 @@ export default function Globe() {
   const [hoveredBooth, setHoveredBooth] = useState<BoothPoint | null>(null);
   const [filter, setFilter] = useState<"ALL" | "USDC">("ALL");
   const [autoRotate, setAutoRotate] = useState(true);
-  const [dimensions, setDimensions] = useState({ width: 720, height: 460 });
+  const [globeWidth, setGlobeWidth] = useState(720);
+  const GLOBE_HEIGHT = 480;
 
   const registryAddress = process.env.NEXT_PUBLIC_BOOTH_REGISTRY_ADDRESS || "0x7bCB577350e600c1372036094f7F7464e54E90b6";
   const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || "https://rpc-amoy.polygon.technology/";
@@ -66,9 +67,9 @@ export default function Globe() {
     if (!container) return;
 
     const updateSize = () => {
-      const rect = container.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        setDimensions({ width: Math.floor(rect.width), height: Math.floor(rect.height) });
+      const nextWidth = Math.floor(container.clientWidth);
+      if (nextWidth > 0) {
+        setGlobeWidth((prev) => (Math.abs(nextWidth - prev) > 2 ? nextWidth : prev));
       }
     };
 
@@ -316,7 +317,7 @@ export default function Globe() {
         </div>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", position: "relative", width: "100%", height: "100%" }}>
+      <div className={styles.mapColumn}>
         <div style={{
           position: "absolute",
           top: "16px",
@@ -342,32 +343,17 @@ export default function Globe() {
           <button onClick={() => adjustAltitude(0.45)} title="Zoom out" style={controlBtnStyle}><MagnifyingGlassMinus size={15} /></button>
         </div>
 
-        <div
-          ref={globeContainerRef}
-          style={{
-            position: "relative",
-            width: "100%",
-            height: "100%",
-            minHeight: "460px",
-            backgroundColor: "#06090F",
-            backgroundImage: "radial-gradient(circle at 50% 50%, rgba(37, 99, 235, 0.1) 0%, rgba(6, 9, 15, 1) 75%)",
-            border: "1px solid rgba(255,255,255,0.08)",
-            borderRadius: "12px",
-            overflow: "hidden",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center"
-          }}
-        >
+        <div ref={globeContainerRef} className={styles.globeBox}>
           <GlobeGL
             ref={globeRef}
-            width={dimensions.width}
-            height={dimensions.height}
+            width={globeWidth}
+            height={GLOBE_HEIGHT}
+            animateIn={false}
+            rendererConfig={{ antialias: false, powerPreference: "high-performance" }}
             backgroundColor="rgba(0,0,0,0)"
             globeImageUrl="/textures/earth-night.jpg"
-            bumpImageUrl="/textures/earth-topology.png"
             atmosphereColor="#2563EB"
-            atmosphereAltitude={0.16}
+            atmosphereAltitude={0.14}
             showAtmosphere
             pointsData={displayedBooths}
             pointLat="lat"
