@@ -636,7 +636,9 @@ export default function DashboardScreen({ wallet, onLogout }: DashboardScreenPro
                     marginBottom: 12,
                   }}>
                     <Text style={{ color: THEME.textSecondary, fontSize: 12 }}>Traditional Wire: ~$6.50</Text>
-                    <Text style={{ color: THEME.accentMint, fontSize: 12, fontWeight: '700' }}>RemitChain: $0.00 Gas</Text>
+                    <Text style={{ color: THEME.accentMint, fontSize: 12, fontWeight: '700' }}>
+                      {isCashOut ? 'Fee: 0.50% App + 1.00% Booth' : 'RemitChain: $0.00 Gas'}
+                    </Text>
                   </View>
 
                   <TouchableOpacity style={styles.sendButton} onPress={handleSendTransfer} activeOpacity={0.8}>
