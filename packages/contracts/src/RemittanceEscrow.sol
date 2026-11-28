@@ -30,8 +30,11 @@ contract RemittanceEscrow is ReentrancyGuard {
         OrderStatus status;
     }
 
+    uint256 public constant PLATFORM_FEE_BPS = 50;
+
     IERC20 public immutable usdcToken;
     IBoothRegistry public immutable boothRegistry;
+    address public immutable treasury;
     uint256 public nextOrderId = 1;
     mapping(uint256 => Order) public orders;
 
@@ -42,13 +45,14 @@ contract RemittanceEscrow is ReentrancyGuard {
         uint256 amount,
         uint256 expiresAt
     );
-    event OrderClaimed(uint256 indexed orderId, address indexed booth, uint256 amount);
+    event OrderClaimed(uint256 indexed orderId, address indexed booth, uint256 boothPayout, uint256 platformFee);
     event OrderRefunded(uint256 indexed orderId, address indexed sender, uint256 amount);
 
-    constructor(address _usdcToken, address _boothRegistry) {
-        require(_usdcToken != address(0) && _boothRegistry != address(0), "Zero address");
+    constructor(address _usdcToken, address _boothRegistry, address _treasury) {
+        require(_usdcToken != address(0) && _boothRegistry != address(0) && _treasury != address(0), "Zero address");
         usdcToken = IERC20(_usdcToken);
         boothRegistry = IBoothRegistry(_boothRegistry);
+        treasury = _treasury;
     }
 
     function createOrder(
@@ -89,8 +93,13 @@ contract RemittanceEscrow is ReentrancyGuard {
         require(keccak256(abi.encodePacked(pickupCode)) == order.pickupCodeHash, "Invalid pickup code");
 
         order.status = OrderStatus.Claimed;
-        usdcToken.safeTransfer(order.booth, order.amount);
-        emit OrderClaimed(orderId, order.booth, order.amount);
+        uint256 platformFee = (order.amount * PLATFORM_FEE_BPS) / 10_000;
+        uint256 boothPayout = order.amount - platformFee;
+        if (platformFee > 0) {
+            usdcToken.safeTransfer(treasury, platformFee);
+        }
+        usdcToken.safeTransfer(order.booth, boothPayout);
+        emit OrderClaimed(orderId, order.booth, boothPayout, platformFee);
     }
 
     function refundExpiredOrder(uint256 orderId) external nonReentrant {

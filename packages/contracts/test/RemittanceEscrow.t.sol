@@ -13,11 +13,12 @@ contract RemittanceEscrowTest is Test {
     address sender = address(0x1111);
     address booth = address(0x2222);
     address otherBooth = address(0x3333);
+    address treasury = address(0x4444);
 
     function setUp() public {
         usdc = new MockUSDC();
         registry = new BoothRegistry(address(usdc));
-        escrow = new RemittanceEscrow(address(usdc), address(registry));
+        escrow = new RemittanceEscrow(address(usdc), address(registry), treasury);
 
         usdc.mint(booth, 100 * 10 ** 6);
         vm.prank(booth);
@@ -38,7 +39,8 @@ contract RemittanceEscrowTest is Test {
 
         vm.prank(booth);
         escrow.claimOrder(orderId, "REMIT-8821");
-        assertEq(usdc.balanceOf(booth), 190 * 10 ** 6);
+        assertEq(usdc.balanceOf(treasury), 500_000);
+        assertEq(usdc.balanceOf(booth), 189_500_000);
     }
 
     function test_RefundExpiredOrder() public {

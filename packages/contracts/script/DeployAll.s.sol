@@ -22,7 +22,7 @@ contract DeployAll is Script {
 
         BoothRegistry registry = new BoothRegistry(usdcAddress);
         YieldVault vault = new YieldVault(usdcAddress, 450);
-        RemittanceEscrow escrow = new RemittanceEscrow(usdcAddress, address(registry));
+        RemittanceEscrow escrow = new RemittanceEscrow(usdcAddress, address(registry), vm.addr(deployerPrivateKey));
 
         console.log("BoothRegistry deployed:", address(registry));
         console.log("YieldVault deployed:", address(vault));
