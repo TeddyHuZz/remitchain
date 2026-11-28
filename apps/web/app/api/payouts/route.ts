@@ -4,7 +4,7 @@ import { polygonAmoy } from "viem/chains";
 import { AMOY_PUBLIC_RPC } from "@repo/contracts-sdk";
 import { getDb } from "../../../lib/db.ts";
 
-const ORDER_CLAIMED_TOPIC = keccak256(toBytes("OrderClaimed(uint256,address,uint256)"));
+const ORDER_CLAIMED_TOPIC = keccak256(toBytes("OrderClaimed(uint256,address,uint256,uint256)"));
 
 export async function GET(request: Request) {
   const db = getDb();
